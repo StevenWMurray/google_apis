@@ -10,6 +10,95 @@ from dataclasses import dataclass
 from googleapiclient.errors import HttpError
 from google_auth import Services
 
+service=Services.from_auth_context("GoogleAds").analytics_management_service
+
+
+acct_list_args = [
+    {
+        "name": "--max-results",
+        "data": {
+            "help": "Pagination: Max # of accounts to return",
+            "type": int
+        }
+    }, {
+        "name": "--start-index",
+        "data": {
+            "help": "Pagination: Which result to start on",
+            "type": int
+        }
+    }
+]
+
+property_get_args = [
+    {
+        "name": "accountId",
+        "data" : {
+            "help": "GA Account ID to retrieve web property from",
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA property ID to retrieve",
+        }
+    }
+]
+
+property_insert_args = [
+    {
+        "name": "accountId",
+        "data" : {
+            "help": "GA Account ID to retrieve web property from",
+        }
+    }, {
+        "name": "body",
+        "data": {
+            "help": "JSON file representing the web property to create",
+        }
+    }
+]
+
+property_list_args = [
+    {
+        "name": "accountId",
+        "data" : {
+            "help": "GA Account ID to retrieve web property from",
+            "nargs": '?',
+            "default": "~all"
+        }
+    }, {
+        "name": "--max-results",
+        "data": {
+            "help": "Pagination: Max # of properties to return",
+            "type": int
+        }
+    }, {
+        "name": "--start-index",
+        "data": {
+            "help": "Pagination: Which result to start on",
+            "type": int
+        }
+    }
+]
+
+property_patch_args = [
+    {
+        "name": "accountId",
+        "data" : {
+            "help": "GA Account ID to retrieve web property from",
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA property ID to retrieve",
+        }
+    }, {
+        "name": "body",
+        "data": {
+            "help": "JSON file representing the web property fields to update",
+        }
+    }
+]
+
 entity_types = [
     {
         "name": "accounts",
@@ -17,20 +106,52 @@ entity_types = [
         "endpoints": [
             {
                 "name": "list",
-                "help": "List account data",
-                "args": [
-                    {
-                        "name": "--max-results"
-                    }, {
-                        "name": "--start-index"
-                    }
-                ]
+                "help": "List data on all accounts",
+                "args": acct_list_args,
+                "library_func": service.management().accounts().list
+            }
+        ]
+    },
+    {
+        "name": "accountSummaries",
+        "help": "Get data on full account hierarchies",
+        "endpoints": [
+            {
+                "name": "list",
+                "help": "List summary data on full account hierarchy",
+                "args": acct_list_args,
+                "library_func": service.management().accountSummaries().list
+            }
+        ]
+    },
+    {
+        "name": "webproperties",
+        "help": "Operations on properties",
+        "endpoints": [
+            {
+                "name": "get",
+                "help": "Get data for one web property",
+                "args": property_get_args,
+                "library_func": service.management().webproperties().get
+            }, {
+                "name": "insert",
+                "help": "Create a new web property",
+                "args": property_insert_args,
+                "library_func": service.management().webproperties().insert
+            }, {
+                "name": "list",
+                "help": "List data on all web properties",
+                "args": property_list_args,
+                "library_func": service.management().webproperties().list
+            }, {
+                "name": "patch",
+                "help": "Update web property",
+                "args": property_patch_args,
+                "library_func": service.management().webproperties().patch
             }
         ]
     }
 ]
-
-service=Services.from_auth_context("GoogleAds").analytics_management_service
 
 
 def add_entity_type_parser(parser, entity_type: dict) -> None:
@@ -46,10 +167,13 @@ def add_entity_type_parser(parser, entity_type: dict) -> None:
 
 def add_endpoint_parser(parser, endpoint: dict) -> None:
     """Simplified interface to add endpoint parsers to argparser"""
-    parser.add_parser(endpoint['name'], help=endpoint['help'])
+    endpoint_parser = parser.add_parser(endpoint['name'], help=endpoint['help'])
+    endpoint_parser.set_defaults(library_func=endpoint['library_func'])
+    for arg in endpoint['args']:
+        endpoint_parser.add_argument(arg['name'], **arg.get('data', {}))
 
 
-def makeRequest(request):
+def sendRequest(request):
     """Make API requests with exponential backoff"""
     retryable_errors = [
         'userRateLimitExceeded',
@@ -71,11 +195,10 @@ def makeRequest(request):
     print(json.dumps(error), file=sys.stderr)
 
 
-def init_entity_type_parsers(parser: argparse.ArgumentParser) -> None:
+def init_parsers(parser: argparse.ArgumentParser) -> None:
     """Add an argument parser for each supported API entity type"""
     subparser = parser.add_subparsers(
         description="Declare which GA entity type to invoke",
-        dest="endpoint",
         required=True)
 
     for entity_type in entity_types:
@@ -86,6 +209,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Create requests against the GA Management API")
 
-    init_entity_type_parsers(parser)
-    namespace = parser.parse_args(['accounts', 'list', '--help'])
-    print(namespace)
+    init_parsers(parser)
+    args = parser.parse_args()
+    library_func = args.library_func
+    delattr(args, 'library_func')
+    request = library_func(**vars(args))
+    print(sendRequest(request))
