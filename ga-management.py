@@ -99,6 +99,224 @@ property_patch_args = [
     }
 ]
 
+view_delete_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "GA Account ID to delete view from"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA Web Property ID to delete view from"
+        }
+    }, {
+        "name": "profileId",
+        "data": {
+            "help": "GA view to delete"
+        }
+    }
+]
+view_get_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "GA Account ID to retrieve view from"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA Web Property ID to retrieve view from"
+        }
+    }, {
+        "name": "profileId",
+        "data": {
+            "help": "GA view to retrieve"
+        }
+    }
+]
+view_insert_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "GA Account ID to retrieve view from"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA Web Property ID to retrieve view from"
+        }
+    }, {
+        "name": "body",
+        "data": {
+            "help": "JSON file representing the view to create"
+        }
+    }
+]
+view_list_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "GA Account ID to retrieve view from",
+            "nargs": '?',
+            "default": "~all"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA Web Property ID to retrieve view from",
+            "nargs": '?',
+            "default": "~all"
+        }
+    }, {
+        "name": "--max-results",
+        "data": {
+            "help": "Pagination: Max # of properties to return",
+            "type": int
+        }
+    }, {
+        "name": "--start-index",
+        "data": {
+            "help": "Pagination: Which result to start on",
+            "type": int
+        }
+    }
+]
+view_patch_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "GA Account ID to retrieve view from"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "GA Web Property ID to retrieve view from"
+        }
+    }, {
+        "name": "profileId",
+        "data": {
+            "help": "GA View ID to update"
+        }
+    }, {
+        "name": "body",
+        "data": {
+            "help": "JSON file representing the view fields to update"
+        }
+    }
+]
+
+adwords_link_delete_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "ID of the account which the given web property belongs to"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "Web property Google Ads link ID"
+        }
+    }, {
+        "name": "webPropertyAdWordsLinkId",
+        "data": {
+            "help": "Web property ID to delete the Google Ads link for",
+        }
+    }
+]
+
+adwords_link_get_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "ID of the account which the given web property belongs to"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "Web property Google Ads link ID"
+        }
+    }, {
+        "name": "webPropertyAdWordsLinkId",
+        "data": {
+            "help": "Web property ID to retrieve the Google Ads link for",
+        }
+    }
+]
+
+adwords_link_insert_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "ID of the account which the given web property belongs to"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "Web property Google Ads link ID"
+        }
+    }, {
+        "name": "body",
+        "data": {
+            "help": "Google Ads Links resource JSON to create",
+        }
+    }
+]
+
+adwords_link_list_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "ID of the account which the given web property belongs to",
+            "nargs": '?',
+            "default": "~all"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "Web property Google Ads link ID",
+            "nargs": '?',
+            "default": "~all"
+        }
+    }, {
+        "name": "--max-results",
+        "data": {
+            "help": "Pagination: Max # of properties to return",
+            "type": int
+        }
+    }, {
+        "name": "--start-index",
+        "data": {
+            "help": "Pagination: Which result to start on",
+            "type": int
+        }
+    }
+]
+
+adwords_link_patch_args = [
+    {
+        "name": "accountId",
+        "data": {
+            "help": "ID of the account which the given web property belongs to"
+        }
+    }, {
+        "name": "webPropertyId",
+        "data": {
+            "help": "Web property Google Ads link ID"
+        }
+    }, {
+        "name": "webPropertyAdWordsLinkId",
+        "data": {
+            "help": "Web property ID to retrieve the Google Ads link for",
+        }
+    }, {
+        "name": "body",
+        "data": {
+            "help": "Modified fields to update on requested Google Ads link",
+        }
+    }
+]
+
 entity_types = [
     {
         "name": "accounts",
@@ -148,6 +366,68 @@ entity_types = [
                 "help": "Update web property",
                 "args": property_patch_args,
                 "library_func": service.management().webproperties().patch
+            }
+        ]
+    }, {
+        "name": "profiles",
+        "help": "Operations on profiles (views)",
+        "endpoints": [
+            {
+                "name": "delete",
+                "help": "Delete an existing view",
+                "args": view_delete_args,
+                "library_func": service.management().profiles().delete
+            }, {
+                "name": "get",
+                "help": "Get data for one view",
+                "args": view_get_args,
+                "library_func": service.management().profiles().get
+            }, {
+                "name": "insert",
+                "help": "Create a new view",
+                "args": view_insert_args,
+                "library_func": service.management().profiles().insert
+            }, {
+                "name": "list",
+                "help": "List data on all views",
+                "args": view_list_args,
+                "library_func": service.management().profiles().list
+            }, {
+                "name": "patch",
+                "help": "Update requested view",
+                "args": view_patch_args,
+                "library_func": service.management().profiles().patch
+            }
+        ]
+    }, {
+        "name": "webPropertyAdWordsLinks",
+        "help": "Operations on Google Ads links",
+        "endpoints": [
+            {
+                "name": "delete",
+                "help": "Delete an existing Google Ads link",
+                "args": adwords_link_delete_args,
+                "library_func": service.management().webPropertyAdWordsLinks().delete
+            }, {
+                "name": "get",
+                "help": "Get data for one Google Ads link",
+                "args": adwords_link_get_args,
+                "library_func": service.management().webPropertyAdWordsLinks().get
+            }, {
+                "name": "insert",
+                "help": "Create a new Google Ads link",
+                "args": adwords_link_insert_args,
+                "library_func": service.management().webPropertyAdWordsLinks().insert
+            }, {
+                "name": "list",
+                "help": "List data on multiple Google Ads links",
+                "args": adwords_link_list_args,
+                "library_func": service.management().webPropertyAdWordsLinks().list
+            }, {
+                "name": "patch",
+                "help": "Update an existing Google Ads link",
+                "args": adwords_link_patch_args,
+                "library_func": service.management().webPropertyAdWordsLinks().patch
             }
         ]
     }
@@ -214,4 +494,4 @@ if __name__ == "__main__":
     library_func = args.library_func
     delattr(args, 'library_func')
     request = library_func(**vars(args))
-    print(sendRequest(request))
+    json.dump(sendRequest(request), sys.stdout)
