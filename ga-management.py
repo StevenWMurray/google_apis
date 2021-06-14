@@ -53,6 +53,9 @@ property_insert_args = [
         "name": "body",
         "data": {
             "help": "JSON file representing the web property to create",
+            "nargs": '?',
+            "type": argparse.FileType('r'),
+            "default": sys.stdin
         }
     }
 ]
@@ -149,7 +152,9 @@ view_insert_args = [
     }, {
         "name": "body",
         "data": {
-            "help": "JSON file representing the view to create"
+            "help": "JSON file representing the view to create",
+            "type": argparse.FileType('r'),
+            "default": sys.stdin
         }
     }
 ]
@@ -259,6 +264,8 @@ adwords_link_insert_args = [
         "name": "body",
         "data": {
             "help": "Google Ads Links resource JSON to create",
+            "type": argparse.FileType('r'),
+            "default": sys.stdin
         }
     }
 ]
@@ -471,7 +478,7 @@ def sendRequest(request):
                 time.sleep((2 ** n) + random.random())
             else:
                 break
-                
+
     print(json.dumps(error), file=sys.stderr)
 
 
@@ -490,8 +497,11 @@ if __name__ == "__main__":
         description="Create requests against the GA Management API")
 
     init_parsers(parser)
-    args = parser.parse_args()
-    library_func = args.library_func
-    delattr(args, 'library_func')
-    request = library_func(**vars(args))
+    cmd_args = parser.parse_args()
+    library_func = cmd_args.library_func
+    delattr(cmd_args, 'library_func')
+
+    if hasattr(cmd_args, 'body'):
+        cmd_args.body = json.load(cmd_args.body)
+    request = library_func(**vars(cmd_args))
     json.dump(sendRequest(request), sys.stdout)

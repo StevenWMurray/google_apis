@@ -11,7 +11,7 @@ from functools import cached_property, lru_cache
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-GOOGLE_ADS_API_VERSION = 'v6'
+GOOGLE_ADS_API_VERSION = 'v7'
 
 RefreshToken = NewType('RefreshToken', str)
 default_scopes = [
@@ -188,12 +188,16 @@ class Services:
     @cached_property
     def ads_service(self):
         """Returns Google Ads performance reporting interface"""
-        return self.ads_client.get_service('GoogleAdsService', version='v6')
+        return self.ads_client.get_service(
+            'GoogleAdsService', 
+            version=GOOGLE_ADS_API_VERSION)
 
     @cached_property
     def ads_customer_service(self):
         """Returns Google Ads customer service"""
-        return self.ads_client.get_service('CustomerService', version='v6')
+        return self.ads_client.get_service(
+            'CustomerService',
+            version=GOOGLE_ADS_API_VERSION)
 
     @lru_cache
     def serialize_enum(self, enum_class_name: str) -> Enum:
@@ -255,4 +259,4 @@ if __name__ == "__main__":
 
 #     serv3 = Services.from_auth_context('GoogleAds')
 #     assert(serv3 is not serv) # Different context key
-    print("Done!")
+    print("All tests passed!")
