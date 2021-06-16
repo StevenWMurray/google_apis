@@ -20,15 +20,29 @@ with_entries(
     with_entries(
         .key as $method |
         .value |
+        .description as $description |
         (.httpMethod as $http | $http_with_body | index($http) != null) as $has_body |
         {entity: $entity, method: $method, has_body: $has_body} as $context |
         order_args($context) |
         to_entries |
-        map({
-            name: (if (.value.required) then .key else ("--" + .key) end),
-            data: (.value | {help: .description, "type": .type, required})
-        }) |
-        {key: $method, value: .}
+        map(
+            (if (.value.required) then .key else ("--" + .key) end) as $arg_name |
+            {
+                name: $arg_name,
+                data: (.value | {help: .description, "type": .type} +
+                (if ($method == "list" and .required) then 
+                    {"type": "string", "nargs": "?", "default": "~all"}
+                else {} end))
+            }) |
+        {key: $method, value: {
+            name: $method,
+            help: $description,
+            args: map(.)
+        }}
     ) |
-    {key: $entity, value: .}
-)
+    {key: $entity, value: {
+        name: $entity,
+        help: null,
+        endpoints: map(.)
+    }}
+) | map(.)

@@ -32,5 +32,5 @@ map(add) |
 (reduce $headers[] as $item ({}; .[$item] |= null)) as $null_row |
 map($null_row + .) |
 map(del(._rowid)) |
-[$headers] + [to_entries[] | (.value | to_entries | map(.value))] |
+[$headers[1:]] + [to_entries[] | (.value | to_entries | map(.value))] |
 map(@tsv)[]
