@@ -42,20 +42,34 @@ def parse_arg_data(data_path: Path):
     arg data with functions.
     """
     arg_data = json.loads(data_path.read_text())
-    for entity in arg_data:
-        entity["help"] = entity_help.get(
-            entity["name"], f"Operations on {entity['name']}")
-        for endpoint in entity["endpoints"]:
-            lib_func = service.management()
-            lib_func = getattr(lib_func, entity["name"])()
-            endpoint["library_func"] = getattr(lib_func, endpoint["name"])
-            for arg in endpoint["args"]:
-                arg["data"]["type"] = type_map[arg["data"]["type"]]
-                if arg["name"] == "body":
-                    arg["data"]["nargs"] = "?"
-                    arg["data"]["default"] = sys.stdout
+    for api in arg_data:
+        api['help'] = f"Invokes the GA {api['name']} API"
+        for entity in api["entities"]:
+            for endpoint in entity["endpoints"]:
+                endpoint["library_func"] = getattr(
+                    getattr(
+                        getattr(service, api["name"])(),
+                        entity["name"])(),
+                    endpoint["name"])
+                # lib_func = getattr(lib_func, entity["name"])()
+                # endpoint["library_func"] = getattr(lib_func, endpoint["name"])
+                for arg in endpoint["args"]:
+                    arg["data"]["type"] = type_map[arg["data"]["type"]]
+                    if arg["name"] == "body":
+                        arg["data"]["nargs"] = "?"
+                        arg["data"]["default"] = sys.stdout
     return arg_data
 
+
+def add_api_selection_parser(parser, api_data: dict) -> None:
+    api_parser = parser.add_parser(api_data['name'], help=api_data['help'])
+    entities = api_data['entities']
+    subparser = api_parser.add_subparsers(
+        description="Declare which entity type to operate on",
+        required=True)
+
+    for entity_type in entities:
+        add_entity_type_parser(subparser, entity_type)
 
 def add_entity_type_parser(parser, entity_type: dict) -> None:
     """Simplified interface to add entity type parsers to argparser"""
@@ -99,13 +113,13 @@ def sendRequest(request):
 
 
 def init_parsers(parser: argparse.ArgumentParser) -> None:
-    """Add an argument parser for each supported API entity type"""
+    """Add an argument parser for each supported API"""
     subparser = parser.add_subparsers(
-        description="Declare which GA entity type to invoke",
+        description="Declare which API to invoke",
         required=True)
 
     for entity_type in parse_arg_data(arg_data_path):
-        add_entity_type_parser(subparser, entity_type)
+        add_api_selection_parser(subparser, entity_type)
 
 
 if __name__ == "__main__":
