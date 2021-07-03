@@ -92,7 +92,7 @@ else null end |
     dateRanges: $dates,
     samplingLevel: ($ARGS.named["sampling"] // "LARGE"),
     dimensions: $dimensions,
-    dimensionFilters: $dimensionFilters,
+    dimensionFilterClauses: [$dimensionFilters],
     metrics: $metrics,
     pageSize: ($ARGS.named["pageSize"] // 100000),
     hideValueRanges: ($ARGS.named["hideValueRanges"] // true)
