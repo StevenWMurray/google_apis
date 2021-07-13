@@ -241,9 +241,9 @@ if __name__ == "__main__":
     # Test service setup
     context_key = 'GoogleAds'
     serv = Services.from_auth_context(context_key)
-    serv.ads_client
-    serv.ads_service
-    ctype = serv.serialize_enum('ClickType')
+#     serv.ads_client
+#     serv.ads_service
+#     ctype = serv.serialize_enum('ClickType')
     serv.sheets_service
     serv.analytics_service
     serv.analytics_management_service
@@ -252,10 +252,10 @@ if __name__ == "__main__":
     # Test flyweight caching
     serv2 = Services.from_auth_context(context_key)
     serv2.analytics_service
-    ctype2 = serv2.serialize_enum('ClickType')
+#     ctype2 = serv2.serialize_enum('ClickType')
     assert(serv2 is serv) # Same context key
     assert(serv2.analytics_service is serv.analytics_service)
-    assert(ctype2 is ctype)
+#     assert(ctype2 is ctype)
 
 #     serv3 = Services.from_auth_context('GoogleAds')
 #     assert(serv3 is not serv) # Different context key

@@ -13,7 +13,7 @@
 
 def parseOpts(constructor):
     [
-        capture("(?<arg>[a-zA-Z0-9_:]+)(?<opts>[(][^)]*[)])?"; "g") |
+        capture("(?<arg>[[:alnum:]:\\+\\-\\*\\/]+)(?<opts>[(][^)]*[)])?"; "g") |
         {
             arg, opts: ([
                 .opts |
@@ -92,9 +92,9 @@ else null end |
     dateRanges: $dates,
     samplingLevel: ($ARGS.named["sampling"] // "LARGE"),
     dimensions: $dimensions,
-    dimensionFilterClauses: [$dimensionFilters],
+    dimensionFilterClauses: (if ($dimensionFilters == null) then null else $dimensionFilters end),
     metrics: $metrics,
     pageSize: ($ARGS.named["pageSize"] // 100000),
-    hideValueRanges: ($ARGS.named["hideValueRanges"] // true)
+    hideValueRanges: ($ARGS.named["hideValueRanges"] // false)
 } |
 with_entries(if .value == null then empty else . end)
