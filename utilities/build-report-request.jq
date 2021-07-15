@@ -12,36 +12,31 @@
 #   - metricFilters
 
 def parseOpts(constructor):
-    [
-        capture("(?<arg>[[:alnum:]:\\+\\-\\*\\/]+)(?<opts>[(][^)]*[)])?"; "g") |
-        {
-            arg, opts: ([
-                .opts |
-                if . == null then "" else .[1:-1] end |
-                capture("(?<key>[^ =]+)=(?<value>[^ \"']+|\"[^\"]+\"|'[^']+')"; "g")
-            ] | from_entries )
-        } |
-        constructor |
-        with_entries(if .value==null then empty else . end)
-    ];
+  [
+    capture("(?<arg>[[:alnum:]:\\+\\-\\*\\/]+)(?<opts>[(][^)]*[)])?"; "g") | {
+      arg, opts: ([
+        .opts |
+        if . == null then "" else .[1:-1] end |
+        capture("(?<key>[^ =]+)=(?<value>[^ \"']+|\"[^\"]+\"|'[^']+')"; "g")
+      ] | from_entries ) } |
+    constructor |
+    with_entries(if .value==null then empty else . end) ];
 
 def splitFilters($key):
-    if $ARGS.named[$key] then (
-        $ARGS.named[$key] |
-        (
-            split(" -o ") as $osplit |
-            split(" -a ") as $asplit |
-            if ((($osplit | length) > 1) and (($asplit | length) > 1)) then
-                error("Filter clauses can only use one of -o or -a chaining, not both")
-            elif (($asplit | length) > 1) then
-                {operator: "AND", filters: $asplit}
-            else
-                {operator: "OR", filters: $osplit}
-            end
-        )
-    ) else null end;
+  ($ARGS.named[$key] // .[$key]) |
+  if . then (
+    split(" -o ") as $osplit |
+    split(" -a ") as $asplit |
+    if ((($osplit | length) > 1) and (($asplit | length) > 1)) then
+      error("Filter clauses can only use one of -o or -a chaining, not both")
+    elif (($asplit | length) > 1) then
+      {operator: "AND", filters: $asplit}
+    else
+      {operator: "OR", filters: $osplit}
+    end
+  ) else null end;
 
-    
+. as $input |
 {
     "~=": "REGEXP",
     "^=": "BEGINS_WITH",
@@ -53,48 +48,47 @@ def splitFilters($key):
     "-lt": "LESS_THAN",
     "-in": "IN_LIST"
 } as $dFilterOpTypes |
-$dimensions |
+$ARGS.named["dimensions"] // $input.dimensions |
 parseOpts(
-    { name: .arg, histogramBuckets: (.opts.buckets[1:-1]? | split(" ")? // null) }
+  { name: .arg, histogramBuckets: (.opts.buckets[1:-1]? | split(" ")? // null) }
 ) as $dimensions |
-$metrics |
+$ARGS.named["metrics"] // $input.metrics |
 parseOpts(
-    { expression: .arg, alias: .opts.alias, formattingType: .opts.format }
+  { expression: .arg, alias: .opts.alias, formattingType: .opts.format }
 ) as $metrics |
-$dates |
+$ARGS.named["dates"] // $input.dates |
 split(" -o ")[:2] |
 map(split(" -to ") | {startDate: .[0], endDate: .[1]}) as $dates |
+$input |
 splitFilters("dimensionFilters") |
 if . then
-    .filters |= map(
-        capture(
-            "(?:(?<not>-not) )?(?:(?<case>-[iI]) )?(?<dim>[a-zA-Z0-9_:]+) ?" +
-            "(?<op>~=|\\^=|\\$=|\\*=|==|-eq|-lt|-gt|-in) ?(?<expr>.*$)"
-        ) |
-        {
-            dimensionName: .dim,
-            "not": (.not != null),
-            operator: $dFilterOpTypes[.op],
-            expressions: (
-                if .op != "-in" then
-                    [.expr | gsub("\""; "")]
-                else
-                    (.expr[1:-1] | [scan("([^ \"]+|\"[^\"]+\")")[] | gsub("\""; "")])
-                end
-            ),
-            caseSensitive: (.case == "-I")
-        }
-    )
+  .filters |= map(
+    capture(
+      "(?:(?<not>-not) )?(?:(?<case>-[iI]) )?(?<dim>[a-zA-Z0-9_:]+) ?" +
+      "(?<op>~=|\\^=|\\$=|\\*=|==|-eq|-lt|-gt|-in) ?(?<expr>.*$)"
+    ) |
+    {
+      dimensionName: .dim,
+      "not": (.not != null),
+      operator: $dFilterOpTypes[.op],
+      expressions: (
+        if .op != "-in" then
+          [.expr | gsub("\""; "")]
+        else
+          (.expr[1:-1] | [scan("([^ \"]+|\"[^\"]+\")")[] | gsub("\""; "")])
+        end),
+      caseSensitive: (.case == "-I") })
 else null end |
 . as $dimensionFilters |
 {
-    viewId: $viewId,
+    viewId: ($ARGS.named["viewId"] // $input.viewId),
     dateRanges: $dates,
     samplingLevel: ($ARGS.named["sampling"] // "LARGE"),
     dimensions: $dimensions,
-    dimensionFilterClauses: (if ($dimensionFilters == null) then null else $dimensionFilters end),
+    dimensionFilterClauses: (if ($dimensionFilters == null) then null else [$dimensionFilters] end),
     metrics: $metrics,
-    pageSize: ($ARGS.named["pageSize"] // 100000),
-    hideValueRanges: ($ARGS.named["hideValueRanges"] // false)
+    pageSize: ($ARGS.named["pageSize"] // $input.pageSize // 100000),
+    hideValueRanges: ($ARGS.named["hideValueRanges"] // $input.hideValueRanges // false)
 } |
-with_entries(if .value == null then empty else . end)
+with_entries(if .value == null then empty else . end) |
+{reportRequests: [.]}
