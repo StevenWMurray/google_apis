@@ -65,7 +65,7 @@ if . then
   .filters |= map(
     capture(
       "(?:(?<not>-not) )?(?:(?<case>-[iI]) )?(?<dim>[a-zA-Z0-9_:]+) ?" +
-      "(?<op>~=|\\^=|\\$=|\\*=|==|-eq|-lt|-gt|-in) ?(?<expr>.*$)"
+      "(?<op>~=|\\^=|\\$=|\\*=|==|-eq|-lt|-gt|-in) ?(?<expr>[^ \"']+|\"[^\"]+\"|'[^']+'$)"
     ) |
     {
       dimensionName: .dim,
@@ -73,15 +73,15 @@ if . then
       operator: $dFilterOpTypes[.op],
       expressions: (
         if .op != "-in" then
-          [.expr | gsub("\""; "")]
+          [.expr | gsub("[\"']"; "")]
         else
-          (.expr[1:-1] | [scan("([^ \"]+|\"[^\"]+\")")[] | gsub("\""; "")])
+          (.expr[1:-1] | [scan("([^ \"]+|\"[^\"]+\")")[] | gsub("[\"']"; "")])
         end),
       caseSensitive: (.case == "-I") })
 else null end |
 . as $dimensionFilters |
 {
-    viewId: ($ARGS.named["viewId"] // $input.viewId),
+    viewId: (($ARGS.named["viewId"] // $input.viewId) | tostring),
     dateRanges: $dates,
     samplingLevel: ($ARGS.named["sampling"] // "LARGE"),
     dimensions: $dimensions,
