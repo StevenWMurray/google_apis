@@ -13,7 +13,7 @@
 
 def parseOpts(constructor):
   [
-    capture("(?<arg>[[:alnum:]:\\+\\-\\*\\/]+)(?<opts>[(][^)]*[)])?"; "g") | {
+    capture("(?<arg>[[:alnum:]_:\\+\\-\\*\\/]+)(?<opts>[(][^)]*[)])?"; "g") | {
       arg, opts: ([
         .opts |
         if . == null then "" else .[1:-1] end |

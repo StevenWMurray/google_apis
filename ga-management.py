@@ -7,9 +7,7 @@ import time
 import random
 import sys
 from pathlib import Path
-from enum import Enum, auto
-from dataclasses import dataclass
-from typing import TextIO
+
 from googleapiclient.errors import HttpError
 from google_auth import Services
 
@@ -99,17 +97,17 @@ def sendRequest(request):
         'backendError'
     ]
 
-    for n in range(0, 5):
+
+    max_retries = 5
+    for n in range(0, max_retries):
         try:
             return request.execute()
 
         except HttpError as error:
-            if error.resp.reason in retryable_errors:
+            if error.resp.reason in retryable_errors and n < max_retries:
                 time.sleep((2 ** n) + random.random())
             else:
-                break
-
-    print(json.dumps(error), file=sys.stderr)
+                raise error
 
 
 def init_parsers(parser: argparse.ArgumentParser) -> None:
