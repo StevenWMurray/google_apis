@@ -100,7 +100,7 @@ def parse_arg_data(data_path: Path) -> dict:
                 arg["data"]["type"] = type_map[arg["data"]["type"]]
                 if arg["name"] == "body":
                     arg["data"]["nargs"] = "?"
-                    arg["data"]["default"] = sys.stdout
+                    arg["data"]["default"] = sys.stdin
     return arg_data
 
 
@@ -163,7 +163,6 @@ if __name__ == "__main__":
     cmd_args = parser.parse_args()
     path_handler = cmd_args.path_handler
     path_handler.parse_path_args(cmd_args)
-    breakpoint()
     path_handler.do_special_arg_handling(cmd_args)
     delattr(cmd_args, 'path_handler')
 
