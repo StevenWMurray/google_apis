@@ -8,14 +8,13 @@ import random
 import sys
 from functools import reduce
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
-from googleapiclient.errors import HttpError
-from google_auth import Services
+from google_auth import Services, send_request
 
 service=Services.from_auth_context("GoogleAds").tagmanager_service
-arg_data_path=Path("utilities/tagmanager-args.json")
-PathArgType = Literal["path", "parent", None]
+arg_data_path=Path("discovery/argfiles/tagmanager.json")
+PathArgType = Optional[Literal["path", "parent"]]
 
 get_invoke = lambda obj, key: getattr(obj, key)()
 
@@ -124,27 +123,6 @@ def add_endpoint_parser(parser, endpoint: dict) -> None:
         endpoint_parser.add_argument(arg['name'], **arg.get('data', {}))
 
 
-def sendRequest(request):
-    """Make API requests with exponential backoff"""
-    retryable_errors = [
-        'userRateLimitExceeded',
-        'quotedExceeded',
-        'internalServerError',
-        'backendError'
-    ]
-
-    while True:
-        try:
-            return request.execute()
-
-        except HttpError as error:
-            if error.resp.reason in retryable_errors and n <= 5:
-                time.sleep((2 ** n) + random.random())
-                n += 1
-            else:
-                raise error
-
-
 def init_parsers(parser: argparse.ArgumentParser) -> None:
     """Add an argument parser for each supported entity type"""
     subparser = parser.add_subparsers(
@@ -169,7 +147,10 @@ if __name__ == "__main__":
     if hasattr(cmd_args, 'body'):
         cmd_args.body = json.load(cmd_args.body)
     request = path_handler.library_function(**vars(cmd_args))
-    response = sendRequest(request)
+    response = send_request(request)
+
+    # The client library sometimes returns a bytes object instead of a
+    # dictionary, so coerce it into a dict if needed
     if hasattr(response, "decode"):
         response = json.loads(response)
     json.dump(response, sys.stdout)

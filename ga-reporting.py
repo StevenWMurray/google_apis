@@ -10,32 +10,10 @@ import sys
 import math
 import itertools
 from datetime import date, timedelta
-from googleapiclient.errors import HttpError
 
-from google_auth import Services
+from google_auth import Services, send_request
 
 service=Services.from_auth_context("GoogleAds").analytics_service
-
-def send_request(request):
-    """Make API requests with exponential backoff"""
-    retryable_errors = [
-        'userRateLimitExceeded',
-        'quotedExceeded',
-        'internalServerError',
-        'backendError'
-    ]
-
-    max_retries = 5
-    for n in range(0, max_retries):
-        try:
-            return request.execute()
-
-        except HttpError as error:
-            if error.resp.reason in retryable_errors and n < max_retries:
-                time.sleep((2 ** n) + random.random())
-            else:
-                raise error
-
 
 
 def init_parsers(parser: argparse.ArgumentParser):

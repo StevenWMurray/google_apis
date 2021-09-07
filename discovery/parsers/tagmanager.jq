@@ -26,7 +26,7 @@ add | (
         gsub(" "; "")[:-1] |
         if (in($schemas)) then . else $customSchemaMapping[.] end |
         (. as $name | $schemas | .[$name]).properties |
-        map_values({type, help: .description}))}) | 
+        map_values({type, help: .description}))}) |
   from_entries
 ) as $bodyArgs | (
   keys |
@@ -35,7 +35,7 @@ add | (
     {
       "key": .,
       "value": "Actions on \($formattedName)"
-    }) | 
+    }) |
   from_entries
 ) as $resourceDescriptions |
 to_entries | map({
@@ -47,7 +47,7 @@ to_entries | map({
     .value |
     to_entries |
     map(
-    .key as $method | 
+    .key as $method |
     .value | {
       "name": $method,
       "help": .description,
@@ -60,21 +60,21 @@ to_entries | map({
             . as $argName |
             $bodyArgs[$etype] |
             (.[$argName] // {type: "string"}) as $argData |
-            {name: $argName, data: $argData}) 
+            {name: $argName, data: $argData})
         ) + (
           # For parameter in .parameterPath: $pdata
           .parameters |
           del(.path // .parent) |
           to_entries |
           map(
-            (if (.value.location == "query") then false else true end) as $isRequired | 
+            (if (.value.location == "query") then false else true end) as $isRequired |
             {
               name: .key,
               data: ( .value | { help: .description, type })
             } |
             .name |= (if ($isRequired | not) then "--" + . else . end))
         ) + (
-          if .request then 
+          if .request then
             [{name: "body", data: {
               help: "JSON file representing the \(.request["$ref"]) to \($method)",
               "type": "FILE"

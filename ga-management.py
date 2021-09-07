@@ -8,11 +8,10 @@ import random
 import sys
 from pathlib import Path
 
-from googleapiclient.errors import HttpError
-from google_auth import Services
+from google_auth import Services, send_request
 
 service=Services.from_auth_context("GoogleAds").analytics_management_service
-arg_data_path=Path("utilities/ga-management-args.json")
+arg_data_path=Path("discovery/argfiles/ga-management.json")
 
 pgh = lambda parent, child: f"ID of the {parent} to retrieve the {child} from."
 gh = lambda child: f"ID of the {child} object to retrieve"
@@ -113,27 +112,6 @@ def read_input(parser):
         return [json.loads(line) for line in lines]
     except json.JSONDecodeError:
         return json.loads('\n'.join(lines))
-
-
-def send_request(request):
-    """Make API requests with exponential backoff"""
-    retryable_errors = [
-        'userRateLimitExceeded',
-        'quotedExceeded',
-        'internalServerError',
-        'backendError'
-    ]
-
-    max_retries = 5
-    for n in range(0, max_retries):
-        try:
-            return request.execute()
-
-        except HttpError as error:
-            if error.resp.reason in retryable_errors and n < max_retries:
-                time.sleep((2 ** n) + random.random())
-            else:
-                raise error
 
 
 def init_parsers(parser: argparse.ArgumentParser) -> None:

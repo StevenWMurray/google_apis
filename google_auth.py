@@ -10,6 +10,7 @@ from functools import cached_property, lru_cache
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 GOOGLE_ADS_API_VERSION = 'v7'
 
@@ -189,7 +190,7 @@ class Services:
     def ads_service(self):
         """Returns Google Ads performance reporting interface"""
         return self.ads_client.get_service(
-            'GoogleAdsService', 
+            'GoogleAdsService',
             version=GOOGLE_ADS_API_VERSION)
 
     @cached_property
@@ -227,6 +228,27 @@ class Services:
     def tagmanager_service(self):
         """Returns authenticated service object for GTM API"""
         return build('tagmanager', 'v2', credentials=self._creds)
+
+
+def send_request(request):
+    """Make API requests with exponential backoff"""
+    retryable_errors = [
+        'userRateLimitExceeded',
+        'quotedExceeded',
+        'internalServerError',
+        'backendError'
+    ]
+
+    max_retries = 5
+    for n in range(0, max_retries):
+        try:
+            return request.execute()
+
+        except HttpError as error:
+            if error.resp.reason in retryable_errors and n < max_retries:
+                time.sleep((2 ** n) + random.random())
+            else:
+                raise error
 
 
 if __name__ == "__main__":
