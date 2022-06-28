@@ -11,19 +11,7 @@ from pathlib import Path
 from google_auth import Services, send_request
 
 service=Services.from_auth_context("GoogleAds").analytics_management_service
-arg_data_path=Path("discovery/argfiles/ga-management.json")
-
-pgh = lambda parent, child: f"ID of the {parent} to retrieve the {child} from."
-gh = lambda child: f"ID of the {child} object to retrieve"
-
-entity_help = {
-    "accounts": "Operations on accounts",
-    "accountSummaries": "Get data on full account hierarchies",
-    "webproperties": "Operations on website properties",
-    "profiles": "Operations on profiles (views)",
-    "webPropertyAdWordsLinks": "Operations on Google Ads links",
-    "goals": "Operations on view goals"
-}
+arg_data_path=Path("/Users/stevenmurray/google-apis/discovery/argfiles/ga-management.json")
 
 type_map = {
     "string": str,
