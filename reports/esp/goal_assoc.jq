@@ -1,19 +1,20 @@
 #!/usr/bin/env jq
 
 [
-    {key: "Call", category: "CallClicks"},
-    {key: "Quiz", category: "QuizCompletions"},
-    {key: "Appt Form", category: "ApptFormSubmissions"},
-    {key: "Contact Form", category: "ContactFormSubmissions"},
-    {key: "Directions", category: "GetDirections"},
-    {key: "2 Minute Session", category: "LongSessions"},
-    {key: "LASIK Savings Calculator", category: "SavingsCalculatorSubmits"},
-    {key: "Contacts Store", category: "ContactsStoreClicks"},
-    {key: "Appt Scheduler", category: "AppointmentSchedulerClicks"},
-    {key: "View Location Details", category: "LocationDetailsViews"},
-    {key: "Email", category: "EmailClicks"},
-    {key: "New Patient Form", category: "NewPatientFormDownloads"}
+    {key: "Call", category: "callClicks"},
+    {key: "Quiz", category: "quizCompletions"},
+    {key: "Appt Form", category: "apptFormSubmissions"},
+    {key: "Contact Form", category: "contactFormSubmissions"},
+    {key: "Directions", category: "getDirections"},
+    {key: "2 Minute Session", category: "longSessions"},
+    {key: "LASIK Savings Calculator", category: "savingsCalculatorSubmits"},
+    {key: "Contacts Store", category: "contactsStoreClicks"},
+    {key: "Appt Scheduler", category: "appointmentSchedulerClicks"},
+    {key: "View Location Details", category: "locationDetailsViews"},
+    {key: "Email", category: "emailClicks"},
+    {key: "New Patient Form", category: "newPatientFormDownloads"}
 ] as $categories |
+.items |
 map(
     select(.name | startswith("WD - ")) |
     {
