@@ -13,7 +13,7 @@ from typing import Literal, Optional
 from google_auth import Services, send_request
 
 service=Services.from_auth_context("GoogleAds").tagmanager_service
-arg_data_path=Path("discovery/argfiles/tagmanager.json")
+arg_data_path=Path("/Users/stevenmurray/google-apis/discovery/argfiles/tagmanager.json")
 PathArgType = Optional[Literal["path", "parent"]]
 
 get_invoke = lambda obj, key: getattr(obj, key)()
