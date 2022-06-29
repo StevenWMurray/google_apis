@@ -22,12 +22,16 @@ def flattenHeader($header; $dateRanges):
   (.metricHeader.metricHeaderEntries | map(.name)) as $metHeaders |
   ($dimHeaders + $metHeaders | map(sub("ga:"; "")));
 
+# [] as $columns |
 [
   .[] |
   (.request.reportRequests[0].dateRanges | map(.startDate + " to " + .endDate)) as $dateRanges |
   .reports[] |
   flattenHeader(.columnHeader; $dateRanges) as $headers |
-  .data |
+  .data as $data |
+  $headers |
+#   $columns += $headers |
+  $data |
   .rows // [] |
   map(
     flattenRow(.; $dateRanges) |
