@@ -2,27 +2,38 @@
 import pickle
 import json
 import yaml
+import time
+import random
 from enum import Enum
 from pathlib import PosixPath
-from dataclasses import dataclass
-from typing import Optional, NewType
-from functools import cached_property, lru_cache
+from attrs import define, field, frozen
+from functools import cached_property, wraps
+from collections.abc import Iterable
+from typing import Optional, NewType, TYPE_CHECKING, cast, ClassVar, Callable, \
+    TypeVar
 
-from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-GOOGLE_ADS_API_VERSION = 'v7'
+if TYPE_CHECKING:
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
 
+
+GOOGLE_ADS_API_VERSION = 'v10'
 RefreshToken = NewType('RefreshToken', str)
-default_scopes = [
+T = TypeVar('T')
+default_scopes = {
+    'https://www.googleapis.com/auth/adwords',
     'https://www.googleapis.com/auth/analytics',
     'https://www.googleapis.com/auth/analytics.edit',
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/tagmanager.edit.containers',
     'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
-    'https://www.googleapis.com/auth/tagmanager.manage.users'
-]
+    'https://www.googleapis.com/auth/tagmanager.manage.users'}
+
 
 class ClientSecret(PosixPath):
     """Binds standard auth token I/O methods to the auth token's Path"""
@@ -48,7 +59,42 @@ class GoogleAdsToken(PosixPath):
             yaml.dump(data, f)
 
 
-@dataclass
+def attempt(
+    fn: Callable[..., T],
+    recoverableErrors: tuple[Exception, ...],
+    fallback: Callable[..., T]
+) -> Callable[..., T]:
+    @wraps(fn)
+    def inner(*args, **kwargs) -> T:
+        try:
+            return fn(*args, **kwargs)
+        except tuple(recoverableErrors): # type: ignore[misc]
+            return fallback(*args, **kwargs)
+
+    return inner
+
+
+@frozen
+class Context:
+    owner: str
+    email: str
+    client_secret_path: ClientSecret = field(
+        converter=ClientSecret, default=ClientSecret.home())
+    token_path: PosixPath = field(converter=PosixPath, default=PosixPath.home())
+    ads_auth_path: GoogleAdsToken = field(
+        converter=GoogleAdsToken, default=GoogleAdsToken.home())
+
+    @classmethod
+    def from_json(cls: type['Context'], ddict: dict) -> 'Context':
+        return cls(
+            ddict['owner'],
+            ddict['data'].get('email'),
+            PosixPath.home() / ddict['data'].get('client_secret_path', None),
+            PosixPath.home() / ddict['data'].get('token_path', None),
+            PosixPath.home() / ddict['data'].get('google_ads_yaml_path', None))
+
+
+@define
 class AuthRoot:
     """Storage container for WD account scoped auth info
 
@@ -59,84 +105,98 @@ class AuthRoot:
             yet, name the path where they should be stored once created.
         adsAuth: the YAML file downloaded from Google Ads
     """
-    wdAcctName: str
-    clientSecretPath: ClientSecret
-    tokenPath: PosixPath
-    adsAuthPath: Optional[GoogleAdsToken] = None
-    force_refresh: bool = False
-
-    def __post_init__(self) -> None:
-        self._credentials = None
-        self._default_scopes = [
-            'https://www.googleapis.com/auth/adwords',
-            'https://www.googleapis.com/auth/analytics',
-            'https://www.googleapis.com/auth/analytics.edit',
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/tagmanager.edit.containers',
-            'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
-            'https://www.googleapis.com/auth/tagmanager.manage.users'
-        ]
+    wd_acct_name: str
+    context: Context
+    scopes: set[str] = field(default=default_scopes)
+    credential_store: 'Credentials' = field(init=False)
 
     def write_refresh_token(self, refresh_token: RefreshToken) -> None:
         """Posts the refresh token to all auth token files"""
-        self.clientSecretPath.write_refresh(refresh_token)
-        if self.adsAuthPath is not None:
-            self.adsAuthPath.write_refresh(refresh_token)
+        self.context.client_secret_path.write_refresh(refresh_token)
+        if self.context.ads_auth_path is not None:
+            self.context.ads_auth_path.write_refresh(refresh_token)
 
-    @cached_property
-    def credentials(self) -> Credentials:
+    def credentials(
+        self,
+        force_refresh: bool = False
+    ) -> 'Credentials':
         """Returns the oauth2 credentials associated with the provided tokens
 
         Checks the following places (in order):
-            - Credentials object already exists on self
+            - Valid Credentials object already exists on self
             - Valid pickled credentials object
             - Expired pickled credentials that can be refreshed
             - Build credentials from client secret file data
         """
-        if self.force_refresh:
+        if force_refresh:
             self.build_credentials()
-            self.tokenPath.write_bytes(pickle.dumps(self._credentials))
-        elif self._credentials is None:
+            self.context.token_path.write_bytes(pickle.dumps(self.credential_store))
+        elif not self.credentials_valid:
             try:
-                self._credentials = pickle.loads(self.tokenPath.read_bytes())
-                assert self._credentials.valid
+                self.credential_store = pickle.loads(self.context.token_path.read_bytes())
+                assert self.credentials_valid
             except (AssertionError, AttributeError):
                 try:
                     self.try_refresh()
-                except (AttributeError, AssertionError):
+                except (AttributeError, AssertionError, RefreshError):
                     self.build_credentials()
                 finally:
-                    self.tokenPath.write_bytes(pickle.dumps(self._credentials))
-            except FileNotFoundError:
+                    self.context.token_path.write_bytes(pickle.dumps(self.credential_store))
+            except (FileNotFoundError, RefreshError):
                 self.build_credentials()
-                self.tokenPath.write_bytes(pickle.dumps(self._credentials))
-        return self._credentials
+                self.context.token_path.write_bytes(pickle.dumps(self.credential_store))
+        return self.credential_store
 
     def try_refresh(self) -> None:
         """Attempts to refresh the auth token"""
-        assert self._credentials.expired and self._credentials.refresh_token
+        assert self.credentials_refreshable
 
         # lazy load expensive module
         from google.auth.transport.requests import Request
-        self._credentials.refresh(Request())
+        self.credential_store.refresh(Request())
 
     def build_credentials(self) -> None:
         """(Re-)Build credentials from client secrets file"""
         # Lazy load expensive module
         from google_auth_oauthlib.flow import InstalledAppFlow
         flow = InstalledAppFlow.from_client_secrets_file(
-            self.clientSecretPath, scopes=self._default_scopes)
-        self._credentials = flow.run_local_server(port=0)
-        self.write_refresh_token(self._credentials.refresh_token)
+            self.context.client_secret_path, scopes=list(self.scopes))
+        self.credential_store = flow.run_local_server(port=0)
+        assert self.credentials_valid
+        self.write_refresh_token(
+            cast(RefreshToken, self.credential_store.refresh_token))
+
+    @property
+    def credentials_valid(self):
+        """Check credentials for validity and sufficient scope"""
+        return hasattr(self, 'credential_store') and \
+            self.credential_store.valid and \
+            self.scopes.issubset(self.credential_store.scopes)
+
+    @property
+    def credentials_refreshable(self):
+        """Check whether invalid credentials can be refreshed"""
+        return hasattr(self, 'credential_store') and \
+            self.credential_store.expired and \
+            self.credential_store.refresh_token and \
+            self.scopes.issubset(self.credential_store.scopes)
+
+    def upgrade_scopes(self, scopes: set[str]) -> None:
+        """Update credentials to include requested scopes
+
+        This will not remove any existing scopes on the Auth Root object. Spawn
+        a new Auth Root to request a credentials downgrade.
+        """
 
 
-def index_of(iterable, condition):
+def first(condition: Callable[[T], bool], iterable: Iterable[T]) -> T:
     """Returns the first item in an iterable matching the condition
 
     If the condition is not satisfied by any item in the iterable, it raises
     a StopIteration error.
     """
-    return next(x for x in iterable if condition(x))
+    return next(filter(condition, iterable))
+
 
 class Services:
     """API for requesting Google Services.
@@ -146,17 +206,18 @@ class Services:
     objects to make authenticated requests to various Google APIs.
     """
     # Flyweight pattern to cache authorized sessions on a per-account level
-    contexts = {}
+    contexts: ClassVar[dict[str, 'Services']] = {}
 
     def __init__(
         self,
         auth_root: AuthRoot,
         context_owner: Optional[str] = None,
+        force_refresh: bool = False
     ) -> None:
-        self._creds = auth_root.credentials
-        self._ads_path = auth_root.adsAuthPath
+        self._creds = auth_root.credentials(force_refresh=force_refresh)
+        self._ads_path = auth_root.context.ads_auth_path
         if context_owner is None:
-            context_owner = auth_root.wdAcctName
+            context_owner = auth_root.wd_acct_name
         self.__class__.contexts[context_owner] = self
 
     @classmethod
@@ -164,20 +225,26 @@ class Services:
         cls,
         context_owner: str,
         context_file_path: PosixPath =
-            PosixPath.home().joinpath('.auth/auth_config.json')
-    ):
+            PosixPath.home().joinpath('.auth/auth_config.json'),
+        scopes: Optional[set[str]] = None
+    ) -> 'Services':
         """Read the auth token paths in from a json config file"""
+
+        def owner_eq(context: dict[str, str]) -> bool:
+            return context['owner'] == context_owner
+
         if context_owner in cls.contexts:
             return cls.contexts[context_owner]
         context_file = PosixPath(context_file_path)
-        context_data = json.loads(context_file.read_text())
-        owner_eq = lambda context: context['owner'] == context_owner
-        context = index_of(context_data, owner_eq)['data']
-        aroot = AuthRoot(
-            context['email'],
-            ClientSecret(PosixPath.home() / context['client_secret_path']),
-            PosixPath.home() / PosixPath(context['token_path']),
-            GoogleAdsToken(PosixPath.home() / context['google_ads_yaml_path']))
+        context_data: list[dict] = json.loads(context_file.read_text())
+
+        try:
+            context = Context.from_json(first(owner_eq, context_data))
+        except StopIteration:
+            raise KeyError(
+                f"Couldn't find context owner {context_owner} in context file")
+
+        aroot = AuthRoot(context.email, context, scopes or default_scopes)
         return cls(aroot, context_owner)
 
     @cached_property
@@ -199,15 +266,6 @@ class Services:
         return self.ads_client.get_service(
             'CustomerService',
             version=GOOGLE_ADS_API_VERSION)
-
-    @lru_cache
-    def serialize_enum(self, enum_class_name: str) -> Enum:
-        """Fetch the requested enum from the ads client.
-
-        Not really required anymore with recent changes to the Google Ads client
-        library, but retained for backwards compatibility with existing code.
-        """
-        return getattr(self.ads_client.enums, enum_class_name + 'Enum')
 
     @cached_property
     def sheets_service(self):
@@ -232,14 +290,15 @@ class Services:
 
 def send_request(request):
     """Make API requests with exponential backoff"""
-    retryable_errors = [
+    retryable_errors = (
         'userRateLimitExceeded',
         'quotedExceeded',
         'internalServerError',
-        'backendError'
-    ]
+        'backendError',
+        'rateLimitExceeded',
+        'Too Many Requests')
 
-    max_retries = 5
+    max_retries = 6
     for n in range(0, max_retries):
         try:
             return request.execute()
@@ -263,9 +322,8 @@ if __name__ == "__main__":
     # Test service setup
     context_key = 'GoogleAds'
     serv = Services.from_auth_context(context_key)
-#     serv.ads_client
-#     serv.ads_service
-#     ctype = serv.serialize_enum('ClickType')
+    serv.ads_client
+    serv.ads_service
     serv.sheets_service
     serv.analytics_service
     serv.analytics_management_service
@@ -274,11 +332,9 @@ if __name__ == "__main__":
     # Test flyweight caching
     serv2 = Services.from_auth_context(context_key)
     serv2.analytics_service
-#     ctype2 = serv2.serialize_enum('ClickType')
     assert(serv2 is serv) # Same context key
     assert(serv2.analytics_service is serv.analytics_service)
-#     assert(ctype2 is ctype)
 
-#     serv3 = Services.from_auth_context('GoogleAds')
-#     assert(serv3 is not serv) # Different context key
+    serv3 = Services.from_auth_context('StevenMurray')
+    assert(serv3 is not serv) # Different context key
     print("All tests passed!")
