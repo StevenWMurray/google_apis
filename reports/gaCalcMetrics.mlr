@@ -1,0 +1,9 @@
+func div0(dividend, divisor) {
+    if (!(is_numeric(dividend) && is_numeric(divisor) && divisor != 0)) { return "--" }
+    else { return dividend / divisor }
+}
+
+$bounceRate = div0($bounces, $sessions);
+$avgSessionDuration = div0($sessionDuration, $sessions);
+$pagesPerSession = div0($pageviews, $sessions);
+$excessPagesPerSession = $pagesPerSession - 1;
