@@ -7,10 +7,11 @@ import random
 from enum import Enum
 from pathlib import PosixPath
 from attrs import define, field, frozen
-from functools import cached_property, wraps
+from functools import cache, cached_property, wraps
 from collections.abc import Iterable
 from typing import Optional, NewType, TYPE_CHECKING, cast, ClassVar, Callable, \
-    TypeVar
+    TypeVar, NamedTuple, Any
+from warnings import warn
 
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from google.auth.transport.requests import Request
 
 
-GOOGLE_ADS_API_VERSION = 'v10'
+GOOGLE_ADS_API_VERSION = 'v11'
 RefreshToken = NewType('RefreshToken', str)
 T = TypeVar('T')
 default_scopes = {
@@ -33,6 +34,23 @@ default_scopes = {
     'https://www.googleapis.com/auth/tagmanager.edit.containers',
     'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
     'https://www.googleapis.com/auth/tagmanager.manage.users'}
+
+# class DefaultApiVersion(Enum):
+#     Ads = 'v11'
+#     UaReporting = 'v4'
+#     UaManagement = 'v3'
+#     Sheets = 'v4'
+#     TagManager = 'v2'
+
+class ApiDataTuple(NamedTuple):
+    api_name: str
+    version: str
+
+class DiscoveryServices:
+    UaReporting = ApiDataTuple('analyticsreporting', 'v4')
+    UaManagement = ApiDataTuple('analytics', 'v3')
+    Sheets = ApiDataTuple('sheets', 'v4')
+    TagManager = ApiDataTuple('tagmanager', 'v2')
 
 
 class ClientSecret(PosixPath):
@@ -181,6 +199,8 @@ class AuthRoot:
             self.credential_store.refresh_token and \
             self.scopes.issubset(self.credential_store.scopes)
 
+    def check_scopes(self, scopes: set[str]) -> bool:
+        ...
     def upgrade_scopes(self, scopes: set[str]) -> None:
         """Update credentials to include requested scopes
 
@@ -219,6 +239,7 @@ class Services:
         if context_owner is None:
             context_owner = auth_root.wd_acct_name
         self.__class__.contexts[context_owner] = self
+        self.services: dict[ApiDataTuple, Any] = {}
 
     @classmethod
     def from_auth_context(
@@ -233,6 +254,7 @@ class Services:
         def owner_eq(context: dict[str, str]) -> bool:
             return context['owner'] == context_owner
 
+        # just return the existing credentials if they already exist
         if context_owner in cls.contexts:
             return cls.contexts[context_owner]
         context_file = PosixPath(context_file_path)
@@ -253,12 +275,14 @@ class Services:
         import google.ads.googleads as ads
         return ads.client.GoogleAdsClient.load_from_storage(self._ads_path)
 
-    @cached_property
-    def ads_service(self):
+    @cache
+    def ads_service(
+        self,
+        service_name: str = 'GoogleAdsService',
+        version: str = GOOGLE_ADS_API_VERSION
+    ):
         """Returns Google Ads performance reporting interface"""
-        return self.ads_client.get_service(
-            'GoogleAdsService',
-            version=GOOGLE_ADS_API_VERSION)
+        return self.ads_client.get_service(service_name, version=version)
 
     @cached_property
     def ads_customer_service(self):
@@ -267,25 +291,36 @@ class Services:
             'CustomerService',
             version=GOOGLE_ADS_API_VERSION)
 
-    @cached_property
+    def discovery_service(self, api: ApiDataTuple, version: Optional[str] = None):
+        """Returns authenticated service object for Discovery Document API"""
+        if version is not None and version != api.version:
+            api = ApiDataTuple(api.api_name, version)
+        if api not in self.services:
+            service = build(api.api_name, api.version, credentials=self._creds)
+            self.services[api] = service
+        else:
+            service = self.services[api]
+        return service
+
+    @property
     def sheets_service(self):
         """Returns authenticated service object for Google Sheets API"""
-        return build('sheets', 'v4', credentials=self._creds)
+        return self.discovery_service(DiscoveryServices.Sheets)
 
-    @cached_property
+    @property
     def analytics_service(self):
         """Returns authenticated service object for GA reporting API"""
-        return build('analyticsreporting', 'v4', credentials=self._creds)
+        return self.discovery_service(DiscoveryServices.UaReporting)
 
-    @cached_property
+    @property
     def analytics_management_service(self):
         """Returns authenticated service object for GA account management API"""
-        return build('analytics', 'v3', credentials=self._creds)
+        return self.discovery_service(DiscoveryServices.UaManagement)
 
-    @cached_property
+    @property
     def tagmanager_service(self):
         """Returns authenticated service object for GTM API"""
-        return build('tagmanager', 'v2', credentials=self._creds)
+        return self.discovery_service(DiscoveryServices.TagManager)
 
 
 def send_request(request):
@@ -331,10 +366,11 @@ if __name__ == "__main__":
 
     # Test flyweight caching
     serv2 = Services.from_auth_context(context_key)
-    serv2.analytics_service
+    serv2.discovery_service(DiscoveryServices.UaReporting, version='v4')
     assert(serv2 is serv) # Same context key
     assert(serv2.analytics_service is serv.analytics_service)
 
     serv3 = Services.from_auth_context('StevenMurray')
     assert(serv3 is not serv) # Different context key
+    assert(serv3.sheets_service is not serv.sheets_service)
     print("All tests passed!")
