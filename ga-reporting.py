@@ -4,8 +4,6 @@
 
 import json
 import argparse
-import time
-import random
 import sys
 import math
 import itertools
@@ -128,6 +126,9 @@ if __name__ == "__main__":
 
             if (has_sampling(response)):
                 bad_req = deepcopy(request_body)
+                logging.debug("SAMPLED RESPONSE: " + str(
+                    request_body['reportRequests'][0]['dateRanges']
+                ))
                 if DEBUGGING:
                     print("ADD TO QUEUE" + str(
                         request_body['reportRequests'][0]['dateRanges']
