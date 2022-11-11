@@ -8,12 +8,16 @@ import sys
 import math
 import itertools
 import logging
-from typing import Iterator
+from typing import Iterator, NamedTuple
 from datetime import date, timedelta
 from copy import deepcopy
 from collections.abc import Mapping
 
 from google_auth import Services, send_request
+
+class DateRange(NamedTuple):
+    start_date: str
+    end_date: str
 
 service=Services.from_auth_context("GoogleAds").analytics_service
 
@@ -70,37 +74,49 @@ def split_request(request_body: dict, response: dict):
     This takes into account the number of samples read vs. the sampling space,
     and divides the date range into even intervals.
     """
-    logging.debug(f'Request: {json.dumps(request_body)}')
-    logging.debug(f"ResponseSampling: \
-        {json.dumps(response['reports'][0]['data']['samplingSpaceSizes'][0])}")
-    num_sessions = int(response['reports'][0]['data']['samplingSpaceSizes'][0])
-    num_samples = int(response['reports'][0]['data']['samplesReadCounts'][0])
-    sampling = {'sessions': num_sessions, 'samples': num_samples}
-    num_intervals = math.ceil(num_sessions / num_samples * 4/3)
+    def calculate_samples():
+        """Guess # of intervals required to fix sampled request"""
+        num_sessions = int(response['reports'][0]['data']['samplingSpaceSizes'][0])
+        num_samples = int(response['reports'][0]['data']['samplesReadCounts'][0])
+        num_intervals = math.ceil(num_sessions / num_samples * 4/3)
+        sampling = {
+            'sessions': num_sessions,
+            'samples': num_samples,
+            'num_intervals': num_intervals
+        }
+        logging.debug(f"ResponseSampling: {json.dumps(sampling)}")
+        return sampling
 
-    interval_groups = []
-    for date_range in request_body['reportRequests'][0]['dateRanges']:
-        start = date.fromisoformat(date_range['startDate'])
-        end = date.fromisoformat(date_range['endDate'])
-        temp = (end - start + timedelta(days=1)) / num_intervals
-        interval_len = timedelta(days=(temp.days+(temp.seconds>0)))
+    def generate_intervals(request_body: dict, num_intervals: int) -> list[list[dict]]:
+        interval_groups = []
+        for date_range in request_body['reportRequests'][0]['dateRanges']:
+            # Format: {startDate: str, endDate: str}
+            start = date.fromisoformat(date_range['startDate'])
+            end = date.fromisoformat(date_range['endDate'])
+            temp = (end - start + timedelta(days=1)) / num_intervals
+            interval_len = timedelta(days=(temp.days+(temp.seconds>0)))
 
-        intervals = []
-        for i in range(0, num_intervals-1):
-            int_end = start + interval_len - timedelta(days=1)
+            intervals = []
+            for i in range(0, num_intervals-1):
+                int_end = start + interval_len - timedelta(days=1)
+                intervals.append({
+                    "startDate": start.isoformat(),
+                    "endDate": int_end.isoformat()
+                })
+                start += interval_len
             intervals.append({
                 "startDate": start.isoformat(),
-                "endDate": int_end.isoformat()
+                "endDate": end.isoformat()
             })
-            start += interval_len
-        intervals.append({
-            "startDate": start.isoformat(),
-            "endDate": end.isoformat()
-        })
-        interval_groups.append(intervals)
+            interval_groups.append(intervals)
+        return interval_groups
 
+    num_intervals = calculate_samples()['num_intervals']
+    interval_groups = generate_intervals(request_body, num_intervals)
     new_date_ranges = zip(*interval_groups)
     for date_range_group in new_date_ranges:
+        # copy required here to ensure that separate retry attempts don't
+        # overwrite each other's date ranges
         rb = deepcopy(request_body)
         for request in rb['reportRequests']:
             request['dateRanges'] = list(date_range_group)
