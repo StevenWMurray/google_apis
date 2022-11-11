@@ -49,7 +49,7 @@ class ApiPath:
             for arg in lib_path:
                 delattr(cli_args, mangleName(arg))
             path = "/".join("/".join(e) for e in zip(lib_path, path_args))
-            setattr(cli_args, self.path_var, path)
+            setattr(cli_args, str(self.path_var), path)
 
         if self.path_var is None:
             self.parse_path_args = lambda x: None

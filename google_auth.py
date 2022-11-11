@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from google.auth.transport.requests import Request
 
 
+__all__ = ('Services', 'send_request')
+
 GOOGLE_ADS_API_VERSION = 'v11'
 RefreshToken = NewType('RefreshToken', str)
 T = TypeVar('T')
@@ -35,16 +37,11 @@ default_scopes = {
     'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
     'https://www.googleapis.com/auth/tagmanager.manage.users'}
 
-# class DefaultApiVersion(Enum):
-#     Ads = 'v11'
-#     UaReporting = 'v4'
-#     UaManagement = 'v3'
-#     Sheets = 'v4'
-#     TagManager = 'v2'
 
 class ApiDataTuple(NamedTuple):
     api_name: str
     version: str
+
 
 class DiscoveryServices:
     UaReporting = ApiDataTuple('analyticsreporting', 'v4')
@@ -104,6 +101,10 @@ class Context:
 
     @classmethod
     def from_json(cls: type['Context'], ddict: dict) -> 'Context':
+        """Instantiate the context object from a dictionary.
+
+        BUGGED: PosixPath / None returns a Type Error
+        """
         return cls(
             ddict['owner'],
             ddict['data'].get('email'),
@@ -122,6 +123,13 @@ class AuthRoot:
         token: the path to the pickled credentials. If they don't exist
             yet, name the path where they should be stored once created.
         adsAuth: the YAML file downloaded from Google Ads
+
+    Currently up for rewrite. The current design is too tightly coupled to a
+    specific means of API key storage. An updated design will allow keys to be
+    stored as environment variables as well.
+
+    Desired changes:
+        - Allow user to define which token storage mechanisms to use
     """
     wd_acct_name: str
     context: Context
@@ -200,7 +208,8 @@ class AuthRoot:
             self.scopes.issubset(self.credential_store.scopes)
 
     def check_scopes(self, scopes: set[str]) -> bool:
-        ...
+        return True
+
     def upgrade_scopes(self, scopes: set[str]) -> None:
         """Update credentials to include requested scopes
 
@@ -346,7 +355,7 @@ def send_request(request):
 
 
 if __name__ == "__main__":
-    """Basic test suite
+    """Basic integration test suite
 
     This is kept separate from the main unit tests because everything here has
     to call either the filesystem or an external API.
