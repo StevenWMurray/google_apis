@@ -29,6 +29,7 @@ from uar_types import (
     VersionedParser,
     FilterType,
     Expression,
+    KeyRequestPair,
 )
 
 if TYPE_CHECKING:
@@ -397,19 +398,21 @@ class UARequestBatch(UserDict, VersionedParser):
 
     @property
     def to_request(self) -> list[Any]:
-        def chunk_queries(queries: list[UARequest]) -> list[list[UARequest]]:
-            return chunk(queries, self.MAXSIZE)
+        def map_key_to_request_batch(key: UARequestKey) -> list[KeyRequestPair]:
+            def chunk_queries(queries: list[UARequest]) -> list[list[UARequest]]:
+                return chunk(queries, self.MAXSIZE)
 
-        def batch_to_request(batch: list[UARequest]) -> dict:
-            def get_request(query: UARequest) -> dict:
-                return query.to_request
+            def batch_to_request(batch: list[UARequest]) -> KeyRequestPair:
+                def get_request(query: UARequest) -> dict:
+                    return query.to_request
 
-            return {"reportRequests": list(map(get_request, batch))}
+                return KeyRequestPair(
+                    key, {"reportRequests": list(map(get_request, batch))}
+                )
 
-        def produce_query_batches(queries: list[UARequest]) -> list[dict]:
-            return list(map(batch_to_request, chunk_queries(queries)))
+            def produce_query_batches(queries: list[UARequest]) -> list[KeyRequestPair]:
+                return list(map(batch_to_request, chunk_queries(queries)))
 
-        def map_key_to_request_batch(key: UARequestKey) -> list[dict[str, Any]]:
             return produce_query_batches(self[key])
 
         return list(chain.from_iterable(map(map_key_to_request_batch, self)))

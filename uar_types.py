@@ -1,10 +1,21 @@
 from attrs import frozen, field
 from enum import Enum, auto
-from typing import TypedDict, TypeVar, NamedTuple, TYPE_CHECKING
+from typing import (
+    TypedDict,
+    TypeVar,
+    NamedTuple,
+    TYPE_CHECKING,
+    Literal,
+    Any,
+    TYPE_CHECKING,
+)
 
 import pyparsing as pp
 from pyparsing import pyparsing_common as pp_common
 
+
+if TYPE_CHECKING:
+    from uar import UARequestKey
 
 pp.ParserElement.enablePackrat()
 CURRENT_VERSION = (0, 1)
@@ -18,6 +29,11 @@ class UAFilterLiteral(NamedTuple):
 class AliasedValue(NamedTuple):
     expr: str
     ua: UAFilterLiteral
+
+
+class KeyRequestPair(NamedTuple):
+    key: "UARequestKey"
+    request: dict[Literal["reportRequests"], list[dict[str, Any]]]
 
 
 class AliasedEnum(Enum):

@@ -4,7 +4,7 @@ from unittest import TestCase, main
 from datetime import date
 from typing import Any, Sequence
 
-from uar_types import AliasedEnum, AliasedValue, UAFilterLiteral
+from uar_types import AliasedEnum, AliasedValue, UAFilterLiteral, KeyRequestPair
 from uar import (
     UARequest,
     UARequestKey,
@@ -26,6 +26,10 @@ from uar import (
 def get_fields(field_list: Sequence[str], obj: dict[str, Any]) -> dict[str, Any]:
     _kl = filter(lambda field: field in obj, field_list)
     return {key: obj[key] for key in _kl}
+
+
+def requests_from_pairs(krpairs: Sequence[KeyRequestPair]) -> list[dict[str, Any]]:
+    return list(map(lambda x: x.request, krpairs))
 
 
 class TestUtilityFunctions(TestCase):
@@ -473,7 +477,7 @@ class TestBuildUARequestBatch(TestCase):
             "reportRequests": [self.batch1[0].to_request, self.batch1[1].to_request]
         }
         request2 = {"reportRequests": [self.batch2[0].to_request]}
-        result = self.batches.to_request
+        result = requests_from_pairs(self.batches.to_request)
         self.assertIn(request1, result)
         self.assertIn(request2, result)
 
@@ -482,7 +486,7 @@ class TestBuildUARequestBatch(TestCase):
         request1 = {"reportRequests": [self.batch1[0].to_request]}
         request2 = {"reportRequests": [self.batch1[1].to_request]}
         request3 = {"reportRequests": [self.batch2[0].to_request]}
-        result = self.batches.to_request
+        result = requests_from_pairs(self.batches.to_request)
         self.assertIn(request1, result)
         self.assertIn(request2, result)
         self.assertIn(request3, result)
