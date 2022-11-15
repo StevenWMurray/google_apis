@@ -7,7 +7,8 @@ import argparse
 import sys
 import math
 import logging
-from typing import Iterator, NamedTuple
+import io
+from typing import Iterator, NamedTuple, TYPE_CHECKING
 from datetime import date, timedelta
 from copy import deepcopy
 from collections.abc import Mapping
@@ -31,6 +32,10 @@ def init_parsers(parser: argparse.ArgumentParser) -> None:
 
     The only mandatory argument is the report request body. Everything else is
     optional.
+
+    For now, the "use new query format" is opt-in, to give time to migrate
+    existing tools that call the CLI bindings to the new query format. This
+    will eventually become the default option.
     """
     parser.add_argument(
         "body",
@@ -62,13 +67,23 @@ def init_parsers(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def read_json_input(cmd_args: argparse.Namespace) -> Iterator[dict]:
+def get_cli_opts() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create requests against the GA Reporting API"
+    )
+
+    init_parsers(parser)
+    cmd_args = parser.parse_args()
+    return cmd_args
+
+
+def read_json_input(body: io.TextIOWrapper) -> Iterator[dict]:
     """Produce a stream of JSON report requests from CLI args
 
     This attempts to read the input file as a JSONL, or if that fails, then as a
     JSON file. Each found input is yielded one at a time.
     """
-    lines = [line for line in cmd_args.body]
+    lines = [line for line in body]
     try:
         yield from (json.loads(line) for line in lines)
     except json.JSONDecodeError:
@@ -140,18 +155,10 @@ def split_request(request_body: dict, response: dict):
         yield rb
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Create requests against the GA Reporting API"
-    )
-
-    init_parsers(parser)
-    cmd_args = parser.parse_args()
-    DEBUGGING = cmd_args.debug
-    if DEBUGGING:
-        logging.basicConfig(level=logging.DEBUG)
-
-    queue = read_json_input(cmd_args)
+def execute_api_queries(
+    input_file: io.TextIOWrapper, output_file: io.TextIOWrapper, DEBUGGING: bool = False
+):
+    queue = read_json_input(input_file)
     try:
         while True:
             request_body = next(queue)
@@ -171,11 +178,21 @@ if __name__ == "__main__":
                     )
                     bad_resp = deepcopy(response)
                     bad_resp["request"] = bad_req
-                    json.dump(bad_resp, cmd_args.output_file)
+                    json.dump(bad_resp, output_file)
                 queue = chain(queue, split_request(bad_req, deepcopy(response)))
             else:
                 response["request"] = request_body
-                json.dump(response, cmd_args.output_file)
-                cmd_args.output_file.write("\n")
+                json.dump(response, output_file)
+                output_file.write("\n")
     except StopIteration:
         pass
+
+
+if __name__ == "__main__":
+    cmd_args = get_cli_opts()
+    if cmd_args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    if cmd_args.use_new_query_format:
+        pass
+    else:
+        execute_api_queries(cmd_args.body, cmd_args.output_file, cmd_args.debug)

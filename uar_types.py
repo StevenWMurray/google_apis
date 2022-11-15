@@ -84,36 +84,41 @@ class FilterOperator(AliasedEnum):
     GTE = AliasedValue(">=", UAFilterLiteral("LESS_THAN", True))
 
 
-Expression = pp.Forward().set_name("Expression")
-numeric_literal = pp_common.number
-string_literal = pp.QuotedString("'", esc_quote="''")
-literal_value = (
-    numeric_literal
-    | string_literal
-    | pp.CaselessKeyword("TRUE")
-    | pp.CaselessKeyword("FALSE")
-    | pp.CaselessKeyword("NULL")
-)
+def build_expr_parser() -> pp.ParserElement:
+    Expression = pp.Forward().set_name("Expression")
+    numeric_literal = pp_common.number
+    string_literal = pp.QuotedString("'", esc_quote="''")
+    literal_value = (
+        numeric_literal
+        | string_literal
+        | pp.CaselessKeyword("TRUE")
+        | pp.CaselessKeyword("FALSE")
+        | pp.CaselessKeyword("NULL")
+    )
 
-UNARY, BINARY, TERNARY = 1, 2, 3
-IN = pp.CaselessKeyword("IN")
-obj_ref = pp_common.identifier ^ pp.QuotedString('"', unquote_results=False)
-DOT, COMMA, LPAR, RPAR = map(pp.Suppress, ".,()")
-expr_term = (
-    literal_value
-    | pp.Group(obj_ref.set_name("table") + DOT + obj_ref.set_name("column"))
-    | pp.Group(obj_ref.set_name("column"))
-)
+    UNARY, BINARY, TERNARY = 1, 2, 3
+    IN = pp.CaselessKeyword("IN")
+    obj_ref = pp_common.identifier ^ pp.QuotedString('"', unquote_results=False)
+    DOT, COMMA, LPAR, RPAR = map(pp.Suppress, ".,()")
+    expr_term = (
+        literal_value
+        | pp.Group(obj_ref.set_name("table") + DOT + obj_ref.set_name("column"))
+        | pp.Group(obj_ref.set_name("column"))
+    )
 
-Expression <<= pp.infix_notation(  # type: ignore
-    expr_term,
-    [
-        (pp.one_of("< > <= >="), BINARY, pp.OpAssoc.LEFT),
-        (pp.one_of("= == <> !="), BINARY, pp.OpAssoc.LEFT),
-        (
-            IN + LPAR + pp.Group(pp.delimited_list(Expression)) + RPAR,
-            UNARY,
-            pp.OpAssoc.LEFT,
-        ),
-    ],
-)
+    Expression <<= pp.infix_notation(  # type: ignore
+        expr_term,
+        [
+            (pp.one_of("< > <= >="), BINARY, pp.OpAssoc.LEFT),
+            (pp.one_of("= == <> !="), BINARY, pp.OpAssoc.LEFT),
+            (
+                IN + LPAR + pp.Group(pp.delimited_list(Expression)) + RPAR,
+                UNARY,
+                pp.OpAssoc.LEFT,
+            ),
+        ],
+    )
+    return Expression
+
+
+Expression = build_expr_parser()
