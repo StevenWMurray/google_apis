@@ -11,8 +11,12 @@ from typing import (
     TypeVar,
     ParamSpec,
     Literal,
+    TypeGuard,
+    ClassVar,
 )
-from itertools import chain
+from itertools import chain, count, repeat, groupby
+from collections import UserDict
+from collections.abc import Sequence, Iterable
 
 from attrs import frozen, field, define, fields
 from attrs import validators as validators
@@ -34,6 +38,7 @@ if TYPE_CHECKING:
 
 P = ParamSpec("P")
 T = TypeVar("T")
+U = TypeVar("U")
 
 
 def camel_to_snake_case(instr: str) -> str:
@@ -52,12 +57,47 @@ def snake_to_camel_case(instr: str) -> str:
     return re.sub(r"_([a-z])", repl, instr)
 
 
+def chunk(iterator: Iterable[T], chunksize: int) -> list[list[T]]:
+    counter = chain.from_iterable(map(lambda x: repeat(x, chunksize), count(0)))
+    zipped = zip(counter, iterator)
+    groups = groupby(zipped, lambda x: x[0])
+    return list(map(lambda x: list(map(lambda y: y[1], x[1])), groups))
+
+
 def len_between(min_len: int, max_len: int):
     def check(self, attribute: Attribute, value: Optional[Sized]) -> None:
         err_str = f"Length must be between {min_len} and {max_len}"
         if value is not None:
             if len(value) < min_len or len(value) > max_len:
                 raise ValueError(err_str)
+
+    return check
+
+
+def same_key(self, attribute: Attribute, value: list[UARequest]) -> None:
+    err_str = """All inputs to a UA request batch must have the same:
+        - viewId
+        - dateRanges
+        - samplingLevel
+        - segments
+        - cohorts
+    """
+
+    def check_key(request: UARequest) -> bool:
+        return request.key != key
+
+    key = value[0].key
+    # ignore mypy type inference bug in filter function here
+    if any(filter(check_key, value)):  # type: ignore
+        raise ValueError(err_str)
+
+
+def compose_validators(
+    *args: Callable[[T, Attribute, U], None]
+) -> Callable[[T, Attribute, U], None]:
+    def check(self: T, attribute: Attribute, value: U) -> None:
+        for validator in args:
+            validator(self, attribute, value)
 
     return check
 
@@ -325,20 +365,51 @@ class UARequest(VersionedParser):
         filters = dict(
             filter(
                 lambda x: x[1] is not None,
-                map(lambda x: build_filter_clause(x), FilterType),
+                map(build_filter_clause, FilterType),
             )
         )
         return self.key.to_request | cols | filters | self.query_options.to_request
 
 
 @define
-class UARequestBatch:
-    """1 batch of up to 5 requests to be sent to the API"""
+class UARequestBatch(UserDict, VersionedParser):
+    MAXSIZE: ClassVar[int] = 5
+    data: dict[UARequestKey, list[UARequest]]
 
-    key: UARequestKey
-    requests: list[UARequest] = field(init=False)
+    @classmethod
+    def from_doc(cls, docs: Sequence[dict[str, Any]]):
+        def get_key(query: UARequest) -> UARequestKey:
+            return query.key
 
+        def get_requests_with_key(key: UARequestKey) -> list[UARequest]:
+            def check_key_eq(query: UARequest) -> bool:
+                return query.key == key
 
-if __name__ == "__main__":
-    with open("ga-reporting/1.yaml") as f:
-        data = yaml.load(f, Loader=yaml.SafeLoader)
+            return list(filter(check_key_eq, queries))
+
+        def make_kv_pair(key: UARequestKey) -> tuple[UARequestKey, list[UARequest]]:
+            return (key, get_requests_with_key(key))
+
+        queries = list(map(UARequest.from_doc, docs))
+        keys = set(map(get_key, queries))
+        pairs = map(make_kv_pair, keys)
+        return cls(dict(pairs))
+
+    @property
+    def to_request(self) -> list[Any]:
+        def chunk_queries(queries: list[UARequest]) -> list[list[UARequest]]:
+            return chunk(queries, self.MAXSIZE)
+
+        def batch_to_request(batch: list[UARequest]) -> dict:
+            def get_request(query: UARequest) -> dict:
+                return query.to_request
+
+            return {"reportRequests": list(map(get_request, batch))}
+
+        def produce_query_batches(queries: list[UARequest]) -> list[dict]:
+            return list(map(batch_to_request, chunk_queries(queries)))
+
+        def map_key_to_request_batch(key: UARequestKey) -> list[dict[str, Any]]:
+            return produce_query_batches(self[key])
+
+        return list(chain.from_iterable(map(map_key_to_request_batch, self)))

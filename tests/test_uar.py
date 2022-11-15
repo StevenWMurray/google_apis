@@ -8,6 +8,7 @@ from uar_types import AliasedEnum, AliasedValue, UAFilterLiteral
 from uar import (
     UARequest,
     UARequestKey,
+    UARequestBatch,
     DateRange,
     SamplingLevel,
     Column,
@@ -15,6 +16,7 @@ from uar import (
     UAQueryOptions,
     camel_to_snake_case,
     snake_to_camel_case,
+    chunk,
     Filter,
     FilterOperator,
     FilterType,
@@ -56,6 +58,11 @@ class TestUtilityFunctions(TestCase):
         self.assertEqual(
             TestEnum.NEQ, TestEnum.get("ua", UAFilterLiteral("EXACT", True))
         )
+
+    def testChunk(self):
+        result = [[1, 2], [3]]
+        self.assertEqual(chunk([1, 2, 3], 2), [[1, 2], [3]])
+        self.assertEqual(chunk("foobar", 4), [["f", "o", "o", "b"], ["a", "r"]])
 
 
 class TestBasicDocumentParse(TestCase):
@@ -366,6 +373,119 @@ class TestDocumentWithFiltersParse(TestCase):
 
     def testSerializeDocWithFilters(self) -> None:
         self.assertEqual(self.request, self.query.to_request)
+
+
+class TestBuildUARequestBatch(TestCase):
+    doc_1 = yaml.load(
+        """
+    scope:
+        viewId: 16619750
+    dateRanges:
+        - startDate: '2022-01-01'
+          endDate: '2022-03-31'
+    columns:
+        dimensions:
+            - 'date'
+        metrics:
+            - 'sessions'
+    """,
+        Loader=yaml.SafeLoader,
+    )
+
+    doc_2 = yaml.load(
+        """
+    scope:
+        viewId: 16619750
+    dateRanges:
+        - startDate: '2022-01-01'
+          endDate: '2022-03-31'
+    columns:
+        dimensions:
+            - 'campaign'
+        metrics:
+            - 'pageviews'
+    """,
+        Loader=yaml.SafeLoader,
+    )
+
+    doc_3 = yaml.load(
+        """
+    scope:
+        viewId: 16619750
+    dateRanges:
+        - startDate: '2022-04-01'
+          endDate: '2022-06-30'
+    columns:
+        dimensions:
+            - 'date'
+        metrics:
+            - 'sessions'
+    """,
+        Loader=yaml.SafeLoader,
+    )
+
+    def setUp(self):
+        self.batch1 = [
+            UARequest(
+                key=UARequestKey(
+                    16619750, (DateRange(date(2022, 1, 1), date(2022, 3, 31)),)
+                ),
+                columns=[
+                    Column(ColumnType.DIMENSION, "date"),
+                    Column(ColumnType.METRIC, "sessions"),
+                ],
+            ),
+            UARequest(
+                key=UARequestKey(
+                    16619750, (DateRange(date(2022, 1, 1), date(2022, 3, 31)),)
+                ),
+                columns=[
+                    Column(ColumnType.DIMENSION, "campaign"),
+                    Column(ColumnType.METRIC, "pageviews"),
+                ],
+            ),
+        ]
+        self.batch2 = [
+            UARequest(
+                key=UARequestKey(
+                    16619750, (DateRange(date(2022, 4, 1), date(2022, 6, 30)),)
+                ),
+                columns=[
+                    Column(ColumnType.DIMENSION, "date"),
+                    Column(ColumnType.METRIC, "sessions"),
+                ],
+            ),
+        ]
+        key1 = self.batch1[0].key
+        key2 = self.batch2[0].key
+        self.batches = UARequestBatch({key1: self.batch1, key2: self.batch2})
+
+    def tearDown(self):
+        UARequestBatch.MAXSIZE = 5
+
+    def testCreateBatchFromQueryYaml(self):
+        return self.assertEqual(
+            self.batches, UARequestBatch.from_doc([self.doc_1, self.doc_2, self.doc_3])
+        )
+
+    def testBuildRequestFromBatchNoSplittingRequired(self):
+        request1 = {
+            "reportRequests": [self.batch1[0].to_request, self.batch1[1].to_request]
+        }
+        request2 = {"reportRequests": [self.batch2[0].to_request]}
+        result = self.batches.to_request
+        self.assertIn(request1, result)
+        self.assertIn(request2, result)
+
+    def testBuildRequestFromBatchWithSplitting(self):
+        UARequestBatch.MAXSIZE = 1
+        request1 = {"reportRequests": [self.batch1[0].to_request]}
+        request2 = {"reportRequests": [self.batch1[1].to_request]}
+        request3 = {"reportRequests": [self.batch2[0].to_request]}
+        result = self.batches.to_request
+        self.assertIn(request1, result)
+        self.assertIn(request2, result)
+        self.assertIn(request3, result)
 
 
 if __name__ == "__main__":
