@@ -33,25 +33,25 @@ def requests_from_pairs(krpairs: Sequence[KeyRequestPair]) -> list[dict[str, Any
 
 
 class TestUtilityFunctions(TestCase):
-    def testCamelToSnakeCaseConversion(self):
+    def testCamelToSnakeCaseConversion(self) -> None:
         self.assertEqual("", camel_to_snake_case(""))
         self.assertEqual("page_size", camel_to_snake_case("pageSize"))
         self.assertEqual(
             "include_value_ranges", camel_to_snake_case("includeValueRanges")
         )
 
-    def testSnakeToCamelCaseConversion(self):
+    def testSnakeToCamelCaseConversion(self) -> None:
         self.assertEqual("", snake_to_camel_case(""))
         self.assertEqual("pageSize", snake_to_camel_case("page_size"))
         self.assertEqual(
             "includeValueRanges", snake_to_camel_case("include_value_ranges")
         )
 
-    def testCallingEnumDotNameReturnsFirstDeclaredNameWithSameValue(self):
+    def testCallingEnumDotNameReturnsFirstDeclaredNameWithSameValue(self) -> None:
         self.assertEqual("DEFAULT", SamplingLevel.DEFAULT.name)
         self.assertEqual("DEFAULT", SamplingLevel.MEDIUM.name)
 
-    def testGetMethodOnAliasedEnum(self):
+    def testGetMethodOnAliasedEnum(self) -> None:
         class TestEnum(AliasedEnum):
             EQ = AliasedValue("==", UAFilterLiteral("EXACT", False))
             NEQ = AliasedValue("!=", UAFilterLiteral("EXACT", True))
@@ -63,10 +63,46 @@ class TestUtilityFunctions(TestCase):
             TestEnum.NEQ, TestEnum.get("ua", UAFilterLiteral("EXACT", True))
         )
 
-    def testChunk(self):
+    def testChunk(self) -> None:
         result = [[1, 2], [3]]
         self.assertEqual(chunk([1, 2, 3], 2), [[1, 2], [3]])
         self.assertEqual(chunk("foobar", 4), [["f", "o", "o", "b"], ["a", "r"]])
+
+
+class TestDateRangeUtilities(TestCase):
+    dtr_1 = DateRange(date(2021, 9, 12), date(2021, 9, 12))
+    dtr_2 = DateRange(date(2022, 2, 1), date(2022, 2, 28))
+    dtr_3 = DateRange(date(2020, 1, 1), date(2020, 3, 31))  # leap year
+
+    def testDateRangeLen(self) -> None:
+        self.assertEqual(len(self.dtr_1), 1)
+        self.assertEqual(len(self.dtr_2), 28)
+        self.assertEqual(len(self.dtr_3), 91)
+
+    def testDateRangeContains(self) -> None:
+        self.assertIn(date(2021, 9, 12), self.dtr_1)
+        self.assertNotIn(date(2022, 3, 1), self.dtr_2)
+        self.assertIn(date(2020, 2, 29), self.dtr_3)
+
+    def testDateRangeContainsStr(self) -> None:
+        self.assertIn("2021-09-12", self.dtr_1)
+        self.assertNotIn("2022-03-01", self.dtr_2)
+        # wrong date format
+        self.assertNotIn("February 29, 2020", self.dtr_3)
+
+    def testDateRangeGetItem(self) -> None:
+        self.assertEqual(self.dtr_1[0], date(2021, 9, 12))
+        self.assertEqual(self.dtr_2[-1], date(2022, 2, 28))
+        self.assertEqual(self.dtr_3[-10], date(2020, 3, 22))
+
+    def testDateRangeGetSlice(self) -> None:
+        self.assertEqual(self.dtr_1[:], self.dtr_1)
+        self.assertEqual(
+            self.dtr_3[31:51], DateRange(date(2020, 2, 1), date(2020, 2, 20))
+        )
+        self.assertEqual(
+            self.dtr_2[10:-5], DateRange(date(2022, 2, 11), date(2022, 2, 23))
+        )
 
 
 class TestBasicDocumentParse(TestCase):
@@ -272,10 +308,10 @@ class TestDocumentWithNoQueryOptions(TestCase):
         "hideValueRanges": True,
     }
 
-    def testDocParsesWithNoQueryOpts(self):
+    def testDocParsesWithNoQueryOpts(self) -> None:
         self.assertEqual(self.query, UARequest.from_doc(self.doc))
 
-    def testDocSerializesWithNoQueryOpts(self):
+    def testDocSerializesWithNoQueryOpts(self) -> None:
         self.assertEqual(self.request, self.query.to_request)
 
 
@@ -382,53 +418,53 @@ class TestDocumentWithFiltersParse(TestCase):
 class TestBuildUARequestBatch(TestCase):
     doc_1 = yaml.load(
         """
-    scope:
-        viewId: 16619750
-    dateRanges:
-        - startDate: '2022-01-01'
-          endDate: '2022-03-31'
-    columns:
-        dimensions:
-            - 'date'
-        metrics:
-            - 'sessions'
-    """,
+        scope:
+            viewId: 16619750
+        dateRanges:
+            - startDate: '2022-01-01'
+              endDate: '2022-03-31'
+        columns:
+            dimensions:
+                - 'date'
+            metrics:
+                - 'sessions'
+        """,
         Loader=yaml.SafeLoader,
     )
 
     doc_2 = yaml.load(
         """
-    scope:
-        viewId: 16619750
-    dateRanges:
-        - startDate: '2022-01-01'
-          endDate: '2022-03-31'
-    columns:
-        dimensions:
-            - 'campaign'
-        metrics:
-            - 'pageviews'
-    """,
+        scope:
+            viewId: 16619750
+        dateRanges:
+            - startDate: '2022-01-01'
+              endDate: '2022-03-31'
+        columns:
+            dimensions:
+                - 'campaign'
+            metrics:
+                - 'pageviews'
+        """,
         Loader=yaml.SafeLoader,
     )
 
     doc_3 = yaml.load(
         """
-    scope:
-        viewId: 16619750
-    dateRanges:
-        - startDate: '2022-04-01'
-          endDate: '2022-06-30'
-    columns:
-        dimensions:
-            - 'date'
-        metrics:
-            - 'sessions'
-    """,
+        scope:
+            viewId: 16619750
+        dateRanges:
+            - startDate: '2022-04-01'
+              endDate: '2022-06-30'
+        columns:
+            dimensions:
+                - 'date'
+            metrics:
+                - 'sessions'
+        """,
         Loader=yaml.SafeLoader,
     )
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.batch1 = [
             UARequest(
                 key=UARequestKey(
@@ -464,15 +500,15 @@ class TestBuildUARequestBatch(TestCase):
         key2 = self.batch2[0].key
         self.batches = UARequestBatch({key1: self.batch1, key2: self.batch2})
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         UARequestBatch.MAXSIZE = 5
 
-    def testCreateBatchFromQueryYaml(self):
+    def testCreateBatchFromQueryYaml(self) -> None:
         return self.assertEqual(
             self.batches, UARequestBatch.from_doc([self.doc_1, self.doc_2, self.doc_3])
         )
 
-    def testBuildRequestFromBatchNoSplittingRequired(self):
+    def testBuildRequestFromBatchNoSplittingRequired(self) -> None:
         request1 = {
             "reportRequests": [self.batch1[0].to_request, self.batch1[1].to_request]
         }
@@ -481,7 +517,7 @@ class TestBuildUARequestBatch(TestCase):
         self.assertIn(request1, result)
         self.assertIn(request2, result)
 
-    def testBuildRequestFromBatchWithSplitting(self):
+    def testBuildRequestFromBatchWithSplitting(self) -> None:
         UARequestBatch.MAXSIZE = 1
         request1 = {"reportRequests": [self.batch1[0].to_request]}
         request2 = {"reportRequests": [self.batch1[1].to_request]}

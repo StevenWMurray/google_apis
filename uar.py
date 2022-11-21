@@ -1,7 +1,7 @@
 from __future__ import annotations
 import yaml
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import (
     TypedDict,
     Optional,
@@ -13,6 +13,7 @@ from typing import (
     Literal,
     TypeGuard,
     ClassVar,
+    overload,
 )
 from itertools import chain, count, repeat, groupby
 from collections import UserDict
@@ -104,9 +105,40 @@ def compose_validators(
 
 
 @frozen
-class DateRange(VersionedParser):
+class DateRange(Sequence, VersionedParser):
     start_date: date
     end_date: date
+
+    def __len__(self) -> int:
+        return (self.end_date - self.start_date).days + 1
+
+    def __contains__(self, item) -> TypeGuard[date | str]:
+        if isinstance(item, date):
+            return self.start_date <= item and item <= self.end_date
+        if isinstance(item, str):
+            try:
+                return date.fromisoformat(item) in self
+            except ValueError:
+                return False
+        return False
+
+    @overload
+    def __getitem__(self, item: int) -> date:
+        ...
+
+    @overload
+    def __getitem__(self, item: slice) -> DateRange:
+        ...
+
+    def __getitem__(self, item: int | slice) -> date | DateRange:
+        if isinstance(item, int):
+            if item >= 0:
+                return self.start_date + timedelta(days=item)
+            else:
+                return self.end_date + timedelta(days=(item + 1))
+        else:
+            rng = slice(item.start or 0, (item.stop or len(self)) - 1)
+            return DateRange(self[rng.start], self[rng.stop])
 
     @classmethod
     def from_doc(cls, obj: DateRangeJson) -> DateRange:
@@ -416,3 +448,14 @@ class UARequestBatch(UserDict, VersionedParser):
             return produce_query_batches(self[key])
 
         return list(chain.from_iterable(map(map_key_to_request_batch, self)))
+
+
+@define
+class UAResponseSampling:
+    ...
+
+
+@define
+class UAResponse:
+    key: UARequestKey
+    headers: list[str]
