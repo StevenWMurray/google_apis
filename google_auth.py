@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = ('Services', 'send_request')
 
-GOOGLE_ADS_API_VERSION = 'v11'
+GOOGLE_ADS_API_VERSION = 'v12'
 RefreshToken = NewType('RefreshToken', str)
 T = TypeVar('T')
 default_scopes = {
@@ -35,7 +35,9 @@ default_scopes = {
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/tagmanager.edit.containers',
     'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
-    'https://www.googleapis.com/auth/tagmanager.manage.users'}
+    'https://www.googleapis.com/auth/tagmanager.manage.users',
+    'https://www.googleapis.com/auth/content'
+}
 
 
 class ApiDataTuple(NamedTuple):
@@ -48,6 +50,7 @@ class DiscoveryServices:
     UaManagement = ApiDataTuple('analytics', 'v3')
     Sheets = ApiDataTuple('sheets', 'v4')
     TagManager = ApiDataTuple('tagmanager', 'v2')
+    MerchantCenter = ApiDataTuple('content', 'v2.1')
 
 
 class ClientSecret(PosixPath):
@@ -278,11 +281,11 @@ class Services:
         aroot = AuthRoot(context.email, context, scopes or default_scopes)
         return cls(aroot, context_owner)
 
-    @cached_property
-    def ads_client(self):
+    @cache
+    def ads_client(self, version: str = GOOGLE_ADS_API_VERSION):
         """Returns top level Google Ads API interface"""
         import google.ads.googleads as ads
-        return ads.client.GoogleAdsClient.load_from_storage(self._ads_path)
+        return ads.client.GoogleAdsClient.load_from_storage(self._ads_path, version=version)
 
     @cache
     def ads_service(
@@ -291,7 +294,7 @@ class Services:
         version: str = GOOGLE_ADS_API_VERSION
     ):
         """Returns Google Ads performance reporting interface"""
-        return self.ads_client.get_service(service_name, version=version)
+        return self.ads_client(version=version).get_service(service_name, version=version)
 
     @cached_property
     def ads_customer_service(self):
@@ -331,6 +334,11 @@ class Services:
         """Returns authenticated service object for GTM API"""
         return self.discovery_service(DiscoveryServices.TagManager)
 
+    @property
+    def merchant_center_service(self):
+        """Returns authenticated service object for Google Content API"""
+        return self.discovery_service(DiscoveryServices.MerchantCenter)
+
 
 def send_request(request):
     """Make API requests with exponential backoff"""
@@ -366,12 +374,13 @@ if __name__ == "__main__":
     # Test service setup
     context_key = 'GoogleAds'
     serv = Services.from_auth_context(context_key)
-    serv.ads_client
-    serv.ads_service
+    serv.ads_client()
+    serv.ads_service()
     serv.sheets_service
     serv.analytics_service
     serv.analytics_management_service
     serv.tagmanager_service
+    serv.merchant_center_service
 
     # Test flyweight caching
     serv2 = Services.from_auth_context(context_key)
