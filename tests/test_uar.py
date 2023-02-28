@@ -28,10 +28,6 @@ def get_fields(field_list: Sequence[str], obj: dict[str, Any]) -> dict[str, Any]
     return {key: obj[key] for key in _kl}
 
 
-def requests_from_pairs(krpairs: Sequence[KeyRequestPair]) -> list[dict[str, Any]]:
-    return list(map(lambda x: x.request, krpairs))
-
-
 class TestUtilityFunctions(TestCase):
     def testCamelToSnakeCaseConversion(self) -> None:
         self.assertEqual("", camel_to_snake_case(""))
@@ -64,9 +60,8 @@ class TestUtilityFunctions(TestCase):
         )
 
     def testChunk(self) -> None:
-        result = [[1, 2], [3]]
-        self.assertEqual(chunk([1, 2, 3], 2), [[1, 2], [3]])
-        self.assertEqual(chunk("foobar", 4), [["f", "o", "o", "b"], ["a", "r"]])
+        self.assertEqual(list(chunk([1, 2, 3], 2)), [[1, 2], [3]])
+        self.assertEqual(list(chunk("foobar", 4)), [["f", "o", "o", "b"], ["a", "r"]])
 
 
 class TestDateRangeUtilities(TestCase):
@@ -513,7 +508,7 @@ class TestBuildUARequestBatch(TestCase):
             "reportRequests": [self.batch1[0].to_request, self.batch1[1].to_request]
         }
         request2 = {"reportRequests": [self.batch2[0].to_request]}
-        result = requests_from_pairs(self.batches.to_request)
+        result = self.batches.to_request
         self.assertIn(request1, result)
         self.assertIn(request2, result)
 
@@ -522,7 +517,7 @@ class TestBuildUARequestBatch(TestCase):
         request1 = {"reportRequests": [self.batch1[0].to_request]}
         request2 = {"reportRequests": [self.batch1[1].to_request]}
         request3 = {"reportRequests": [self.batch2[0].to_request]}
-        result = requests_from_pairs(self.batches.to_request)
+        result = self.batches.to_request
         self.assertIn(request1, result)
         self.assertIn(request2, result)
         self.assertIn(request3, result)

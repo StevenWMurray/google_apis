@@ -31,9 +31,13 @@ class AliasedValue(NamedTuple):
     ua: UAFilterLiteral
 
 
+class RequestBatchDict(TypedDict):
+    reportRequests: list[dict[str, Any]]
+
+
 class KeyRequestPair(NamedTuple):
     key: "UARequestKey"
-    request: dict[Literal["reportRequests"], list[dict[str, Any]]]
+    request: RequestBatchDict
 
 
 class AliasedEnum(Enum):
@@ -49,7 +53,7 @@ class AliasedEnum(Enum):
     """
 
     @classmethod
-    def get(cls, key_type: str, key_val: str):
+    def get(cls, key_type: str, key_val):
         def key_matches(member: AliasedEnum) -> bool:
             return getattr(member.value, key_type) == key_val
 

@@ -31,6 +31,7 @@ from uar_types import (
     FilterType,
     Expression,
     KeyRequestPair,
+    RequestBatchDict,
 )
 
 if TYPE_CHECKING:
@@ -59,11 +60,11 @@ def snake_to_camel_case(instr: str) -> str:
     return re.sub(r"_([a-z])", repl, instr)
 
 
-def chunk(iterator: Iterable[T], chunksize: int) -> list[list[T]]:
+def chunk(iterable: Iterable[T], chunksize: int) -> map[list[T]]:
     counter = chain.from_iterable(map(lambda x: repeat(x, chunksize), count(0)))
-    zipped = zip(counter, iterator)
+    zipped = zip(counter, iterable)
     groups = groupby(zipped, lambda x: x[0])
-    return list(map(lambda x: list(map(lambda y: y[1], x[1])), groups))
+    return map(lambda x: list(map(lambda y: y[1], x[1])), groups)
 
 
 def len_between(min_len: int, max_len: int):
@@ -77,7 +78,8 @@ def len_between(min_len: int, max_len: int):
 
 
 def same_key(self, attribute: Attribute, value: list[UARequest]) -> None:
-    err_str = """All inputs to a UA request batch must have the same:
+    err_str = """
+    All inputs to a UA request batch must have the same:
         - viewId
         - dateRanges
         - samplingLevel
@@ -131,12 +133,15 @@ class DateRange(Sequence, VersionedParser):
         ...
 
     def __getitem__(self, item: int | slice) -> date | DateRange:
+        slice_step_err = "Slices on a DateRange only accept step sizes of size 1."
         if isinstance(item, int):
             if item >= 0:
                 return self.start_date + timedelta(days=item)
             else:
                 return self.end_date + timedelta(days=(item + 1))
         else:
+            if item.step and item.step != 1:
+                raise IndexError(slice_step_err)
             rng = slice(item.start or 0, (item.stop or len(self)) - 1)
             return DateRange(self[rng.start], self[rng.stop])
 
@@ -429,9 +434,9 @@ class UARequestBatch(UserDict, VersionedParser):
         return cls(dict(pairs))
 
     @property
-    def to_request(self) -> list[Any]:
+    def to_kr_pairs(self) -> list[KeyRequestPair]:
         def map_key_to_request_batch(key: UARequestKey) -> list[KeyRequestPair]:
-            def chunk_queries(queries: list[UARequest]) -> list[list[UARequest]]:
+            def chunk_queries(queries: list[UARequest]) -> map[list[UARequest]]:
                 return chunk(queries, self.MAXSIZE)
 
             def batch_to_request(batch: list[UARequest]) -> KeyRequestPair:
@@ -449,6 +454,15 @@ class UARequestBatch(UserDict, VersionedParser):
 
         return list(chain.from_iterable(map(map_key_to_request_batch, self)))
 
+    @property
+    def to_request(self) -> list[RequestBatchDict]:
+        def requests_from_pairs(
+            krpairs: Sequence[KeyRequestPair],
+        ) -> list[RequestBatchDict]:
+            return list(map(lambda x: x.request, krpairs))
+
+        return requests_from_pairs(self.to_kr_pairs)
+
 
 @define
 class UAResponseSampling:
@@ -459,3 +473,23 @@ class UAResponseSampling:
 class UAResponse:
     key: UARequestKey
     headers: list[str]
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    import json
+
+    parser = argparse.ArgumentParser(
+        description="Transform universal query requests to GA API requests"
+    )
+    parser.add_argument(
+        "body",
+        nargs="?",
+        default=sys.stdin,
+        help="File containing the API request(s)",
+        type=argparse.FileType("r", encoding="UTF-8"),
+    )
+    body = list(yaml.load_all(parser.parse_args().body, Loader=yaml.SafeLoader))
+    for doc in UARequestBatch.from_doc(body).to_request:
+        json.dump(doc, sys.stdout)
