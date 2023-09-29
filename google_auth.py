@@ -6,13 +6,13 @@ import time
 import random
 from enum import Enum
 from pathlib import PosixPath
-from attrs import define, field, frozen
 from functools import cache, cached_property, wraps
 from collections.abc import Iterable
 from typing import Optional, NewType, TYPE_CHECKING, cast, ClassVar, Callable, \
     TypeVar, NamedTuple, Any
 from warnings import warn
 
+from attrs import define, field, frozen
 from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = ('Services', 'send_request')
 
-GOOGLE_ADS_API_VERSION = 'v12'
+GOOGLE_ADS_API_VERSION = 'v14'
 RefreshToken = NewType('RefreshToken', str)
 T = TypeVar('T')
 default_scopes = {
@@ -284,8 +284,8 @@ class Services:
     @cache
     def ads_client(self, version: str = GOOGLE_ADS_API_VERSION):
         """Returns top level Google Ads API interface"""
-        import google.ads.googleads as ads
-        return ads.client.GoogleAdsClient.load_from_storage(self._ads_path, version=version)
+        import google.ads.googleads.client as ads
+        return ads.GoogleAdsClient.load_from_storage(self._ads_path, version=version)
 
     @cache
     def ads_service(
@@ -313,6 +313,19 @@ class Services:
         else:
             service = self.services[api]
         return service
+
+    @cache
+    def ga4_service(self, scope='rw'):
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+        return BetaAnalyticsDataClient(credentials=self._creds)
+
+    @cache
+    def ga4_admin_service(self, version='v1_beta', scope='rw'):
+        if version == 'v1_beta':
+            from google.analytics.admin_v1beta import AnalyticsAdminServiceClient
+        if version == 'v1_alpha':
+            from google.analytics.admin_v1alpha import AnalyticsAdminServiceClient
+        return AnalyticsAdminServiceClient(credentials=self._creds)
 
     @property
     def sheets_service(self):
@@ -376,6 +389,9 @@ if __name__ == "__main__":
     serv = Services.from_auth_context(context_key)
     serv.ads_client()
     serv.ads_service()
+    serv.ga4_service()
+    serv.ga4_admin_service(version='v1_beta')
+    serv.ga4_admin_service(version='v1_alpha')
     serv.sheets_service
     serv.analytics_service
     serv.analytics_management_service
