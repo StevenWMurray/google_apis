@@ -3,12 +3,14 @@
 """Invoke GA reporting API, passing each input line as a request body"""
 
 import json
+import yaml
 import argparse
 import sys
 import math
 import logging
 import io
-from typing import Iterator, NamedTuple, TYPE_CHECKING
+from warnings import warn
+from typing import Iterator, NamedTuple, TYPE_CHECKING, Any
 from datetime import date, timedelta
 from copy import deepcopy
 from collections.abc import Mapping
@@ -186,6 +188,27 @@ def execute_api_queries(
                 output_file.write("\n")
     except StopIteration:
         pass
+
+
+def main_v1(
+    input_file: io.TextIOWrapper, output_file: io.TextIOWrapper, DEBUGGING: bool = False
+):
+    """Main flow of control for new query version
+
+    Does not yet support splitting based on sampled responses.
+    """
+    query = uar.UARequestBatch.from_doc(
+        list(yaml.load_all(input_file, Loader=yaml.SafeLoader))
+    )
+
+
+def execute(query: uar.UARequestBatch) -> dict[str, Any]:
+    for request in query.to_request:
+        response = send_request(request)
+        if has_sampling(response):
+            warn_msg = f"Sampling detected on query with view ID {query}"
+            # warn()
+    return {}
 
 
 if __name__ == "__main__":

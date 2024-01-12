@@ -11,7 +11,7 @@ from pathlib import Path
 from google_auth import Services, send_request
 
 service=Services.from_auth_context("GoogleAds").analytics_management_service
-arg_data_path=Path("/Users/stevenmurray/google-apis/discovery/argfiles/ga-management.json")
+arg_data_path=Path("/Users/stevenmurray/google_apis/discovery/argfiles/ga-management.json")
 
 type_map = {
     "string": str,
