@@ -1,4 +1,0 @@
-$channel == "Search" || $channel == "SEARCH" { $channelSortOrder = 1 }
-$channel == "Display" || $channel == "DISPLAY" { $channelSortOrder = 2 }
-$channel == "Video" || $channel == "VIDEO" { $channelSortOrder = 3 }
-$channel == "Total" || $channel == "TOTAL" { $channelSortOrder = 10 }
